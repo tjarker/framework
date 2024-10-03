@@ -1,0 +1,8 @@
+*.bloop
+*.bsp
+*.metals
+*.vscode
+/**/build/
+/**/target/
+/**/project/
+waveform.vcd
