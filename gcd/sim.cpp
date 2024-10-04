@@ -68,7 +68,7 @@ uint32_t createSimContext(const char* name, const char* wave_file, const char* t
 
 void destroySimContext(uint32_t id) {
 
-    printf("Native invocations: %lu\n", invocations);
+    printf("Native invocations: %lu!!!!!!!!!!!!!!\n", invocations);
 
     delete simulation_contexts[id];
     simulation_contexts.erase(id);
