@@ -1,9 +1,11 @@
+`timescale 1ns / 1ns
+
 module GCD(
     input signed [62:0] a,
     input signed [62:0] b,
     input clock,
     input loadValues,
-    output isValid,
+    output logic isValid,
     output [62:0] result);
 
     reg signed [62:0] x;
@@ -28,7 +30,10 @@ module GCD(
     end
     assign result = x;
     assign isValid_internal = y == 'h0;
-    assign isValid = isValid_internal;
+
+    always @* begin
+        isValid = #1 isValid_internal;
+    end
 
     always @loadValues begin
         if (loadValues) begin
