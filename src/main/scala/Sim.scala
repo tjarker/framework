@@ -1,65 +1,94 @@
 
-import com.sun.jna.{InvocationMapper, Library, Native, NativeLibrary}
+import com.sun.jna.{InvocationMapper, Library, Native, NativeLibrary, Pointer, Callback}
 
 import java.lang.reflect.{InvocationHandler, Method}
 
 
 
 trait ModelInterface extends Library {
-  def createSimContext(name: String, waveFile: String, timeResolution: String): Long
-  def destroySimContext(ctx: Long): Unit
-  def setInput(ctx: Long, id: Long, value: Long): Unit
-  def getOutput(ctx: Long, id: Long): Long
-  def tick(ctx: Long): Unit
+  def createSimContext(name: String, waveFile: String, timeResolution: String): Pointer
+  def destroySimContext(ctx: Pointer): Unit
+  def setInput(ctx: Pointer, id: Long, value: Long): Unit
+  def getOutput(ctx: Pointer, id: Long): Long
+  def tick(ctx: Pointer): Unit
+
+  trait bool_cb extends Callback {
+    def invoke(): Boolean
+  }
+  def eval(cb: bool_cb): Unit
+
+  trait event_cb extends Callback {
+    def invoke(outputs: Pointer): Boolean
+  }
+  def tickUntil(ctx: Pointer, cb: event_cb): Long
 }
 
 
 object Sim extends App {
-  val model = Native.load("./gcd/build/libmodel.so", classOf[ModelInterface]).asInstanceOf[ModelInterface]
-
-  val ctx = model.createSimContext("GCD", "gcd.vcd", "1ns")
-
-  model.tick(ctx)
-  model.tick(ctx)
-
-  model.setInput(ctx, 0, 0x4444)
-  model.setInput(ctx, 1, 0x700C)
-  model.setInput(ctx, 2, 1)
-
-  model.tick(ctx)
-
-  model.setInput(ctx, 2, 0)
-
-  model.tick(ctx)
-
-  val ctx2 = model.createSimContext("GCD", "gcd2.vcd", "10ns")
-
-  model.setInput(ctx2, 0, 0x1343)
-  model.setInput(ctx2, 1, 0x43211)
-  model.setInput(ctx2, 2, 1)
-
-  model.tick(ctx2)
-
-  model.setInput(ctx2, 2, 0)
-
-  model.tick(ctx2)
-
-  while (model.getOutput(ctx2, 0) == 0) {
-    model.tick(ctx2)
-  }
-
-  println(s"Result for model 2: ${model.getOutput(ctx2, 1)}")
-
-  model.destroySimContext(ctx2)
 
 
-  while (model.getOutput(ctx, 0) == 0) {
-    model.tick(ctx)
-  }
+  val start = System.nanoTime()
 
-  println(s"Result for model 1: ${model.getOutput(ctx, 1)}")
+  val lib = Native.load("./gcd/build/libmodel.so", classOf[ModelInterface])
 
-  model.destroySimContext(ctx)
+
+  val ctx = lib.createSimContext("GCD", "gcd.vcd", "1ns")
+
+  lib.tick(ctx)
+  lib.tick(ctx)
+
+  lib.setInput(ctx, 0, 0x4444)
+  lib.setInput(ctx, 1, 0x700C)
+  lib.setInput(ctx, 2, 1)
+
+  lib.tick(ctx)
+
+  lib.setInput(ctx, 2, 0)
+
+  lib.tick(ctx)
+
+  // val ctx2 = lib.createSimContext("GCD", "gcd2.vcd", "10ns")
+
+  // lib.setInput(ctx2, 0, 0x1343)
+  // lib.setInput(ctx2, 1, 0x43211)
+  // lib.setInput(ctx2, 2, 1)
+
+  // lib.tick(ctx2)
+
+  // lib.setInput(ctx2, 2, 0)
+
+  // lib.tick(ctx2)
+
+  // lib.tickUntil(ctx2, new lib.event_cb {
+  //   def invoke(outputs: Pointer): Unit = {
+  //     outputs.getLongArray(0, 2).apply(0) != 0
+  //   }
+  // })
+
+  // println(s"Result for model 2: ${lib.getOutput(ctx2, 1)}")
+
+  // lib.destroySimContext(ctx2)
+
+
+  lib.tickUntil(ctx, new lib.event_cb {
+    def invoke(outputs: Pointer): Boolean = {
+      val outs = outputs.getLongArray(0, 2)
+      println(s"Outputs: ${outs.mkString(", ")}")
+      val res = outs.apply(0)
+      println(s"Result: $res")
+      val cmp = res != 0L
+      println(s"Comparing: $cmp")
+      cmp
+    }
+  })
+
+  println(s"Result for model 1: ${lib.getOutput(ctx, 1)}")
+
+  lib.destroySimContext(ctx)
+
+  val end = System.nanoTime()
+  val duration = (end - start) / 1e6 // Convert to milliseconds
+  println(s"Execution time: $duration ms")
 }
 
 /*

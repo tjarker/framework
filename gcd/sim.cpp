@@ -4,19 +4,8 @@
 #include <unordered_map>
 #include "stdint.h"
 
-extern "C" {
-    uint32_t createSimContext(const char* name, const char* wave_file, const char* time_resolution);
-    void destroySimContext(uint32_t id);
-    void setInput(uint32_t ctx, uint32_t id, uint64_t val);
-    void tick(uint32_t ctx);
-    uint64_t getOutput(uint32_t ctx, uint32_t id);
-}
 
 
-
-// Notes
-// contextp->time() gives current time
-void tick(uint32_t ctx);
 
 class SimulationContext {
     public:
@@ -47,66 +36,100 @@ class SimulationContext {
     }
 };
 
-uint32_t contextCounter = 0;
-std::unordered_map<uint32_t, SimulationContext*> simulation_contexts;
+typedef bool (*bool_cb)(void);
 
-
+// arbitrary simulation event callback taking in all outputs and returning a boolean
+typedef bool (*event_cb)(uint64_t[]);
 
 const uint32_t NUM_OUTPUTS = 2;
 
 uint64_t invocations = 0;
 
-uint32_t createSimContext(const char* name, const char* wave_file, const char* time_resolution) {
+extern "C" {
+    SimulationContext * createSimContext(const char* name, const char* wave_file, const char* time_resolution);
+    void destroySimContext(SimulationContext * id);
+    void setInput(SimulationContext * ctx, uint64_t id, uint64_t val);
+    void tick(SimulationContext * ctx);
+    uint64_t getOutput(SimulationContext * ctx, uint64_t id);
+    void eval(bool_cb cb);
+    uint64_t tickUntil(SimulationContext * ctx, event_cb cb);
+}
 
-    uint32_t id = contextCounter++;
-    simulation_contexts[id] = new SimulationContext(name, wave_file, time_resolution);
+void eval(bool_cb cb) {
+    bool res = cb();
+    printf("Eval result: %d\n", res);
+}
+
+uint64_t tickUntil(SimulationContext * ctx, event_cb cb) {
+    uint64_t out_vals[NUM_OUTPUTS];
+
+    uint64_t ticks = 0;
+    
+    bool res = false;
+    do {
+        tick(ctx);
+        ticks++;
+        for (int i = 0; i < NUM_OUTPUTS; i++) {
+            out_vals[i] = getOutput(ctx, i);
+        }
+        printf("valid is %d\n", out_vals[0]);
+        res = cb(out_vals);
+        printf("res is %d\n", res);
+    } while (!res);
+
+    printf("Tick until ran %d cycles\n", ticks);
+
+    invocations++;
+
+    return ticks;
+}
+
+
+
+SimulationContext * createSimContext(const char* name, const char* wave_file, const char* time_resolution) {
+
+    SimulationContext * ctx = new SimulationContext(name, wave_file, time_resolution);
 
     invocations = 1;
 
-    return id;
+    return ctx;
 }
 
-void destroySimContext(uint32_t id) {
+void destroySimContext(SimulationContext * ctx) {
 
-    printf("Native invocations: %lu!!!!!!!!!!!!!!\n", invocations);
+    printf("Native invocations: %lu\n", invocations);
 
-    delete simulation_contexts[id];
-    simulation_contexts.erase(id);
+    delete ctx;
     
 }
 
 
-void setInput(uint32_t ctx, uint32_t id, uint64_t val) {
-    SimulationContext* sim = simulation_contexts[ctx];
+void setInput(SimulationContext * ctx, uint64_t id, uint64_t val) {
     switch (id) {
-        case 0: sim->GCD->a = val; break;
-        case 1: sim->GCD->b = val; break;
-        case 2: sim->GCD->loadValues = val; break;
+        case 0: ctx->GCD->a = val; break;
+        case 1: ctx->GCD->b = val; break;
+        case 2: ctx->GCD->loadValues = val; break;
     }
     invocations++;
 }
 
-uint64_t getOutput(uint32_t ctx, uint32_t id) {
-    SimulationContext* sim = simulation_contexts[ctx];
+uint64_t getOutput(SimulationContext * ctx, uint64_t id) {
     switch (id) {
-        case 0: return sim->GCD->isValid;
-        case 1: return sim->GCD->result;
+        case 0: return ctx->GCD->isValid;
+        case 1: return ctx->GCD->result;
     }
     invocations++;
 }
 
-uint64_t get_output(uint32_t ctx, uint32_t id);
-
-void tick(uint32_t ctx) {
-    SimulationContext* sim = simulation_contexts[ctx];
-    sim->GCD->clock = 0;
-    sim->GCD->eval();
-    sim->tfp->dump(sim->contextp->time());
-    sim->contextp->timeInc(1);
-    sim->GCD->clock = 1;
-    sim->GCD->eval();
-    sim->tfp->dump(sim->contextp->time());
-    sim->contextp->timeInc(1);
+void tick(SimulationContext * ctx) {
+    ctx->GCD->clock = 0;
+    ctx->GCD->eval();
+    ctx->tfp->dump(ctx->contextp->time());
+    ctx->contextp->timeInc(1);
+    ctx->GCD->clock = 1;
+    ctx->GCD->eval();
+    ctx->tfp->dump(ctx->contextp->time());
+    ctx->contextp->timeInc(1);
     invocations++;
 }
 
