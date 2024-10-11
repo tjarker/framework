@@ -4,13 +4,15 @@ import com.sun.jna.{InvocationMapper, Library, Native, NativeLibrary, Pointer, C
 import java.lang.reflect.{InvocationHandler, Method}
 
 
-
-trait ModelInterface extends Library {
+trait SimpleModelInterface extends Library {
   def createSimContext(name: String, waveFile: String, timeResolution: String): Pointer
   def destroySimContext(ctx: Pointer): Unit
   def setInput(ctx: Pointer, id: Long, value: Long): Unit
   def getOutput(ctx: Pointer, id: Long): Long
   def tick(ctx: Pointer): Unit
+}
+
+trait ModelInterface extends SimpleModelInterface {
 
   trait bool_cb extends Callback {
     def invoke(): Boolean
@@ -72,15 +74,12 @@ object Sim extends App {
 
   lib.tickUntil(ctx, new lib.event_cb {
     def invoke(outputs: Pointer): Boolean = {
-      val outs = outputs.getLongArray(0, 2)
-      println(s"Outputs: ${outs.mkString(", ")}")
-      val res = outs.apply(0)
-      println(s"Result: $res")
-      val cmp = res != 0L
-      println(s"Comparing: $cmp")
-      cmp
+      outputs.getLongArray(0, 2).apply(0) != 0
     }
   })
+  // while (lib.getOutput(ctx, 0) == 0) {
+  //   lib.tick(ctx)
+  // }
 
   println(s"Result for model 1: ${lib.getOutput(ctx, 1)}")
 
@@ -91,8 +90,8 @@ object Sim extends App {
   println(s"Execution time: $duration ms")
 }
 
-/*
 
+/*
 
 trait ModelInterface extends Library {
   def sim_init(): Unit
@@ -254,4 +253,5 @@ object Sim extends App {
   gcd.close()
 
 }
+
 */
