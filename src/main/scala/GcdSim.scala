@@ -1,61 +1,76 @@
+import com.sun.jna.Native
 
-import com.sun.jna._
+import scala.collection.mutable
 
-import framwork.types._
+import framework.*
+import framework.Time.*
+import framework.Module
+import framework.SimController
+import framework.Types.*
+import framework.ClockDomain
+
+import java.nio.file.Path
 
 object GcdSim extends App {
 
+  class Gcd extends Module("./gcd/build/gcd_model.so") {
+
+    val name = "GCD"
+
+    val clock = Input("clock", Clock())
+    val reset = Input("reset", Reset())
+    val req = Input("req", Bool())
+    val ack = Output("ack", Bool())
+    val loadVal = Input("loadVal", UInt(16.W))
+    val result = Output("result", UInt(16.W))
+
+    domains += ClockDomain(
+      clock,
+      Some(reset),
+      mutable.ArrayBuffer[Input[Bits]](reset, req, loadVal),
+      mutable.ArrayBuffer[Output[Bits]](ack, result)
+    )
+  }
 
 
-    val lib = Native.load("./gcd_hs/build/gcd_hs_model.so", classOf[ModelInterface])
+  val gcd = simulate(Gcd())
 
-    val ctx = lib.createSimContext("GCD", "gcd_hs.vcd", "1ns")
+  def transact(gcd: Gcd, value: BigInt): BigInt = {
+    gcd.loadVal.poke(value)
+    gcd.req.poke(1)
 
-    def tick(n: Int = 1) = for (_ <- 0 until n) lib.tick(ctx)
-    def reset(v: Long) = lib.setInput(ctx, 0, v)
-    def req(v: Long) = lib.setInput(ctx, 1, v)
-    def loadVal(v: Long) = lib.setInput(ctx, 2, v)
+    while (gcd.ack.peek == 0) {
+      gcd.clock.step()
+    }
 
-    def ack() = lib.getOutput(ctx, 0)
-    def result() = lib.getOutput(ctx, 1)
+    val res = gcd.result.peek
 
-    reset(1)
-    req(0)
-    loadVal(0)
+    gcd.req.poke(0)
 
-    tick(2)
+    while (gcd.ack.peek != 0) {
+      gcd.clock.step()
+    }
 
-    reset(0)
+    res
+  }
 
-    tick(2)
-
-    loadVal(0x4444)
-    req(1)
-
-    tick(4)
-    while (ack() == 0) tick()
-
-    req(0)
-
-    tick(4)
-    while (ack() == 1) tick()
-
-
-
-    loadVal(0x700C)
-    req(1)
-
-    while (ack() == 0) tick()
-    println(s"Result: ${result()}")
-    tick(4)
-
-    req(0)
-
-    tick(4)
-    while (ack() == 1) tick()
-
-
-
-    lib.destroySimContext(ctx)
   
+  gcd.reset.assert()
+  gcd.req.poke(0)
+  gcd.loadVal.poke(0)
+
+  gcd.clock.step()
+
+  gcd.reset.deassert()
+
+  gcd.clock.step()
+
+  transact(gcd, 0x4444)
+
+  val res = transact(gcd, 0x700C)
+
+  println(s"Result: ${res}")
+
+  gcd.destroy()
+
 }

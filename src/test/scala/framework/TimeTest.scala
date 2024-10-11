@@ -1,5 +1,7 @@
 
-import Time._
+package framework
+
+import Time.*
 
 import org.scalatest.flatspec.AnyFlatSpec
 

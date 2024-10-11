@@ -125,7 +125,7 @@ object Threading {
 
 }
 
-import Threading._
+import Threading.*
 
 @main def schedulerMain = {
 

@@ -14,7 +14,7 @@ class SimulationContext {
     VGCD* GCD;
     VerilatedVcdC* tfp;
 
-    SimulationContext(char* name, char* wave_file, char* time_resolution) {
+    SimulationContext(const char* name, const char* wave_file, const char* time_resolution) {
         contextp = new VerilatedContext;;
         GCD = new VGCD(contextp, name);;
         tfp = new VerilatedVcdC;;
@@ -114,8 +114,8 @@ void setInput(SimulationContext * ctx, uint64_t id, uint64_t val) {
 
 uint64_t getOutput(SimulationContext * ctx, uint64_t id) {
     switch (id) {
-        case 0: return ctx->GCD->ack;
-        case 1: return ctx->GCD->result;
+        case 3: return ctx->GCD->ack;
+        case 4: return ctx->GCD->result;
     }
     invocations++;
 }
@@ -129,6 +129,7 @@ void tick(SimulationContext * ctx) {
     ctx->GCD->eval();
     ctx->tfp->dump(ctx->contextp->time());
     ctx->contextp->timeInc(1);
+    ctx->tfp->flush();
     invocations++;
 }
 

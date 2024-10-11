@@ -119,7 +119,7 @@ class ModelState(nInPorts: Int, nOutPorts: Int) {
 
   def getInChanges(): (Array[Long], Array[Long]) = {
     val changes = inPorts.zipWithIndex.filter((v,i) => inChanged(i)).map((v,i) => (i.toLong,v)).unzip
-    for (i <- changes._1) inChanged(i.toInt) = false
+    for (i <- changes.*1) inChanged(i.toInt) = false
     changes
   }
 
