@@ -1,3 +1,4 @@
+
 #include "VGCD.h"       // Generated Verilated model header
 #include "verilated.h"       // Verilator functions
 #include "verilated_vcd_c.h" // VCD tracing support
@@ -13,7 +14,7 @@ class SimulationContext {
     VGCD* GCD;
     VerilatedVcdC* tfp;
 
-    SimulationContext(const char* name, const char* wave_file, const char* time_resolution) {
+    SimulationContext(char* name, char* wave_file, char* time_resolution) {
         contextp = new VerilatedContext;;
         GCD = new VGCD(contextp, name);;
         tfp = new VerilatedVcdC;;
@@ -72,9 +73,7 @@ uint64_t tickUntil(SimulationContext * ctx, event_cb cb) {
         for (int i = 0; i < NUM_OUTPUTS; i++) {
             out_vals[i] = getOutput(ctx, i);
         }
-        printf("valid is %d\n", out_vals[0]);
         res = cb(out_vals);
-        printf("res is %d\n", res);
     } while (!res);
 
     printf("Tick until ran %d cycles\n", ticks);
@@ -106,16 +105,16 @@ void destroySimContext(SimulationContext * ctx) {
 
 void setInput(SimulationContext * ctx, uint64_t id, uint64_t val) {
     switch (id) {
-        case 0: ctx->GCD->a = val; break;
-        case 1: ctx->GCD->b = val; break;
-        case 2: ctx->GCD->loadValues = val; break;
+        case 0: ctx->GCD->reset = val; break;
+        case 1: ctx->GCD->req = val; break;
+        case 2: ctx->GCD->loadVal = val; break;
     }
     invocations++;
 }
 
 uint64_t getOutput(SimulationContext * ctx, uint64_t id) {
     switch (id) {
-        case 0: return ctx->GCD->isValid;
+        case 0: return ctx->GCD->ack;
         case 1: return ctx->GCD->result;
     }
     invocations++;

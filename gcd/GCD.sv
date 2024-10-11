@@ -1,48 +1,70 @@
-`timescale 1ns / 1ns
+module GCD #(
+    parameter int W = 16
+)(
+    input  logic clock,
+    input  logic reset,
+    input  logic req,
+    output logic ack,
+    input  logic [W - 1:0] loadVal,
+    output logic [W - 1:0] result
+);
 
-module GCD(
-    input signed [62:0] a,
-    input signed [62:0] b,
-    input clock,
-    input loadValues,
-    output logic isValid,
-    output [62:0] result);
+    typedef enum logic [2:0] {
+        wait_a,
+        ack_a,
+        wait_b,
+        compare,
+        update_a,
+        update_b,
+        ack_result
+    } state_t;
 
-    reg signed [62:0] x;
-    reg signed [62:0] y;
-    wire isValid_internal;
-    always @(posedge clock) begin
-        if (loadValues) begin
-            if (a > 0)
-                x <= a;
-            else
-                x <= -a;
+    state_t state;
 
-            if (b > 0)
-                y <= b;
-            else
-                y <= -b;
+    logic [W - 1:0] a;
+    logic [W - 1:0] b;
+
+    assign ack = (state == ack_a || state == ack_result);
+    assign result = a;
+
+    always_ff @(posedge clock) begin
+
+        if (reset) begin
+            state <= wait_a;
+            a <= 0;
+            b <= 0;
+        end else begin
+            case (state)
+                wait_a: begin
+                    a <= loadVal;
+                    if (req) state <= ack_a;
+                end
+                ack_a: begin
+                    if (!req) state <= wait_b;
+                end
+                wait_b: begin
+                    b <= loadVal;
+                    if (req) state <= compare;
+                end
+                compare: begin
+                    if (a > b) state <= update_a;
+                    else if (a < b) state <= update_b;
+                    else state <= ack_result;
+                end
+                update_a: begin
+                    a <= a - b;
+                    state <= compare;
+                end
+                update_b: begin
+                    b <= b - a;
+                    state <= compare;
+                end
+                ack_result: begin
+                    if (!req) state <= wait_a;
+                end
+                default: $display("Invalid state\n");
+            endcase
         end
-        else if (x > y)
-            x <= x - y;
-        else
-            y <= y - x;
-    end
-    assign result = x;
-    assign isValid_internal = y == 'h0;
-
-    always @* begin
-        isValid = #1 isValid_internal;
     end
 
-    always @loadValues begin
-        if (loadValues) begin
-            $display("Calculating GCD of %X and %X.", a, b);
-        end
-    end
-    always @isValid_internal begin
-        if (isValid_internal) begin
-            $display("Calculated GCD to be %X.", x);
-        end
-    end
 endmodule
