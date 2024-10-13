@@ -15,7 +15,7 @@ object VerilatorInterface {
     def destroySimContext(ctx: Pointer): Unit
     def setInput(ctx: Pointer, id: Long, value: Long): Unit
     def getOutput(ctx: Pointer, id: Long): Long
-    def tick(ctx: Pointer): Unit
+    def tick(ctx: Pointer, cycles: Int): Unit
   }
 }
 
@@ -36,25 +36,23 @@ class VerilatorInterface(
     timeUnit.toString + "\u0000"
   )
 
-  def tick(n: Int = 1) = for (_ <- 0 until n) lib.tick(ctx)
+  val inVals = collection.mutable.Map[Long, BigInt]()
 
-  def setInput(id: Long, value: Long) = lib.setInput(ctx, id, value)
+  def tick(n: Int = 1) = lib.tick(ctx, n)
 
-  def getOutput(id: Long) = lib.getOutput(ctx, id)
+  private def setInput(id: Long, value: Long) = lib.setInput(ctx, id, value)
 
-  def destroy() = lib.destroySimContext(ctx)
+  private def getOutput(id: Long) = lib.getOutput(ctx, id)
 
-  def peekInput(id: Long): BigInt = 0
+  def peekInput(id: Long): BigInt = inVals(id)
 
-  def pokeInput(id: Long, value: BigInt): Unit = setInput(id, value.toLong)
+  def pokeInput(id: Long, value: BigInt): Unit = {
+    inVals(id) = value
+    setInput(id, value.toLong)
+  }
 
   def peekOutput(id: Long): BigInt = getOutput(id)
 
-  def stepClockDomain(cd: ClockDomain, steps: Int): Unit = {
-    //println(s"Step $steps in $cd")
-    for (_ <- 0 until steps) {
-      lib.tick(ctx)
-    }
-  }
+  def destroy() = lib.destroySimContext(ctx)
 
 }

@@ -22,18 +22,20 @@ trait Module(val libPath: String) {
 
   val domains = mutable.ArrayBuffer[ClockDomain]()
 
-  lazy val ports = domains.flatMap { cd =>
-    cd.inputs ++ cd.outputs
-  }
+  lazy val ports = domains.flatMap(_.ports)
 
-  lazy val portToId = domains.flatMap { cd =>
-    (cd.inputs ++ cd.outputs).zipWithIndex
-  }.toMap
+  lazy val portToId = ports.zipWithIndex.toMap
 
   lazy val idToPort = portToId.map(_.swap)
 
   lazy val clockToClockDomain = domains.map { cd =>
     cd.clock -> cd
+  }.toMap
+
+  lazy val portToClockDomain = domains.flatMap { cd =>
+    cd.ports.map { p =>
+      p -> cd
+    }
   }.toMap
 
   var ctrl: SimController = null

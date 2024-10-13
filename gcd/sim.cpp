@@ -50,10 +50,8 @@ extern "C" {
     SimulationContext * createSimContext(const char* name, const char* wave_file, const char* time_resolution);
     void destroySimContext(SimulationContext * id);
     void setInput(SimulationContext * ctx, uint64_t id, uint64_t val);
-    void tick(SimulationContext * ctx);
+    void tick(SimulationContext * ctx, uint32_t cycles);
     uint64_t getOutput(SimulationContext * ctx, uint64_t id);
-    void eval(bool_cb cb);
-    uint64_t tickUntil(SimulationContext * ctx, event_cb cb);
 }
 
 void eval(bool_cb cb) {
@@ -68,7 +66,7 @@ uint64_t tickUntil(SimulationContext * ctx, event_cb cb) {
     
     bool res = false;
     do {
-        tick(ctx);
+        tick(ctx, 1);
         ticks++;
         for (int i = 0; i < NUM_OUTPUTS; i++) {
             out_vals[i] = getOutput(ctx, i);
@@ -105,31 +103,32 @@ void destroySimContext(SimulationContext * ctx) {
 
 void setInput(SimulationContext * ctx, uint64_t id, uint64_t val) {
     switch (id) {
-        case 0: ctx->GCD->reset = val; break;
-        case 1: ctx->GCD->req = val; break;
-        case 2: ctx->GCD->loadVal = val; break;
+        case 0: ctx->GCD->clock = val; break;
+        case 1: ctx->GCD->reset = val; break;
+        case 2: ctx->GCD->req = val; break;
+        case 3: ctx->GCD->loadVal = val; break;
     }
+    ctx->GCD->eval();
     invocations++;
 }
 
 uint64_t getOutput(SimulationContext * ctx, uint64_t id) {
     switch (id) {
-        case 3: return ctx->GCD->ack;
-        case 4: return ctx->GCD->result;
+        case 4: return ctx->GCD->ack;
+        case 5: return ctx->GCD->result;
     }
+    
     invocations++;
 }
 
-void tick(SimulationContext * ctx) {
-    ctx->GCD->clock = 0;
-    ctx->GCD->eval();
-    ctx->tfp->dump(ctx->contextp->time());
-    ctx->contextp->timeInc(1);
-    ctx->GCD->clock = 1;
-    ctx->GCD->eval();
-    ctx->tfp->dump(ctx->contextp->time());
-    ctx->contextp->timeInc(1);
-    ctx->tfp->flush();
+void tick(SimulationContext * ctx, uint32_t cycles) {
+    for (uint32_t i = 0; i < cycles; i++) {
+        ctx->GCD->eval();
+        ctx->tfp->dump(ctx->contextp->time());
+        ctx->contextp->timeInc(1);
+        ctx->tfp->flush();
+    }
+    
     invocations++;
 }
 

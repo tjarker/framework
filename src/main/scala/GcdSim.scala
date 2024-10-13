@@ -17,23 +17,24 @@ object GcdSim extends App {
 
     val name = "GCD"
 
-    val clock = Input("clock", Clock())
+    val clock = Input("clock", Clock(10.ns))
     val reset = Input("reset", Reset())
-    val req = Input("req", Bool())
+    val req = Input("req", Bool(), driveSkew = 1.ns)
     val ack = Output("ack", Bool())
-    val loadVal = Input("loadVal", UInt(16.W))
+    val loadVal = Input("loadVal", UInt(16.W), driveSkew = 2.ns)
     val result = Output("result", UInt(16.W))
 
     domains += ClockDomain(
       clock,
       Some(reset),
-      mutable.ArrayBuffer[Input[Bits]](reset, req, loadVal),
+      mutable.ArrayBuffer[Input[Bits]](req, loadVal),
       mutable.ArrayBuffer[Output[Bits]](ack, result)
     )
   }
 
 
   val gcd = simulate(Gcd())
+
 
   def transact(gcd: Gcd, value: BigInt): BigInt = {
     gcd.loadVal.poke(value)

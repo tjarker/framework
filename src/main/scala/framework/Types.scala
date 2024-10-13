@@ -3,6 +3,7 @@ package framework
 import scala.collection.mutable
 
 import framework.Module.ModuleBuilderContext
+import framework.Time.*
 
 object Types {
   case class Width(width: Int) {
@@ -32,7 +33,7 @@ object Types {
     override def toString(): String = s"SInt($width)"
   }
 
-  class Clock() extends Bits {
+  class Clock(val period: Time) extends Bits {
     val width = 1.W
     override def toString(): String = "Clock"
   }
@@ -58,7 +59,7 @@ object Types {
     def unapply[T <: Bits](o: Output[T]): Option[(String, T)] = Some(o.name, o.t)
   }
 
-  class Input[+T <: Bits](val name: String, val t: T)(using val ctx: ModuleBuilderContext)
+  class Input[+T <: Bits](val name: String, val t: T, val driveSkew: Time = 0.fs)(using val ctx: ModuleBuilderContext)
       extends Port[T] {
     val width = t.width
 
@@ -84,6 +85,7 @@ object Types {
     def step(steps: Int = 1): Unit = {
       p.ctx.step.apply().apply(p, steps)
     }
+    def period = p.t.period
   }
 
   extension (p: Input[Reset]) {

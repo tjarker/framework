@@ -20,6 +20,15 @@ object Time {
     def s: Time = Time(i, TimeUnit.s)
   }
 
+  extension (l: Long) {
+    def fs: Time = Time(l, TimeUnit.fs)
+    def ps: Time = Time(l, TimeUnit.ps)
+    def ns: Time = Time(l, TimeUnit.ns)
+    def us: Time = Time(l, TimeUnit.us)
+    def ms: Time = Time(l, TimeUnit.ms)
+    def s: Time = Time(l, TimeUnit.s)
+  }
+
   def apply(value: Long, unit: TimeUnit): Time = {
     val t = new Time
     t.valueFs = value * math.pow(10, unit.exp).toLong
@@ -41,6 +50,12 @@ class Time extends Ordered[Time] {
   }
   def *(that: Long): Time = {
     Time(valueFs * that, TimeUnit.fs)
+  }
+  def /(that: Time): Long = {
+    valueFs / that.valueFs
+  }
+  def /(that: Long): Time = {
+    Time(valueFs / that, TimeUnit.fs)
   }
 
   def toString(unit: TimeUnit): String = {

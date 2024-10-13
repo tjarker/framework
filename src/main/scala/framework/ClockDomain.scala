@@ -5,11 +5,14 @@ import scala.collection.mutable
 import Types.*
 
 case class ClockDomain(
-    val clock: Port[Clock],
-    val reset: Option[Port[Reset]],
+    val clock: Input[Clock],
+    val reset: Option[Input[Reset]],
     val inputs: mutable.ArrayBuffer[Input[Bits]],
     val outputs: mutable.ArrayBuffer[Output[Bits]]
 ) {
+
+  def ports: Seq[Port[Bits]] = Seq(clock) ++ reset.toSeq ++ inputs ++ outputs
+
   override def toString(): String = {
     s"ClockDomain(${clock}, ${reset}, ${inputs.mkString("[", ", ", "]")}, ${outputs.mkString("[", ", ", "]")})"
   }
