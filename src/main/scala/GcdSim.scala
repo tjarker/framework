@@ -11,18 +11,18 @@ import framework.ClockDomain
 
 import java.nio.file.Path
 
-object GcdSim extends App {
+@main def GcdSim(): Unit = {
 
   class Gcd extends Module("./gcd/build/gcd_model.so") {
 
     val name = "GCD"
 
-    val clock = Input("clock", Clock(10.ns))
-    val reset = Input("reset", Reset())
-    val req = Input("req", Bool(), driveSkew = 1.ns)
-    val ack = Output("ack", Bool())
-    val loadVal = Input("loadVal", UInt(16.W), driveSkew = 2.ns)
-    val result = Output("result", UInt(16.W))
+    val clock = Input(Clock(10.ns))
+    val reset = Input(Reset())
+    val req = Input(Bool(), driveSkew = 4.ns)
+    val ack = Output(Bool())
+    val loadVal = Input(UInt(16.W), driveSkew = 3.ns)
+    val result = Output(UInt(16.W))
 
     domains += ClockDomain(
       clock,
@@ -33,7 +33,7 @@ object GcdSim extends App {
   }
 
 
-  val gcd = simulate(Gcd())
+  val gcd = simulate(Gcd(), 1.ns)
 
 
   def transact(gcd: Gcd, value: BigInt): BigInt = {

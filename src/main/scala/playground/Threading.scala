@@ -17,10 +17,6 @@ object Threading {
     def evaluate(): Boolean = targetTick == simulationTime
   }
 
-  sealed trait ThreadStatus
-  case object Running extends ThreadStatus
-  case class WaitingFor(event: Event) extends ThreadStatus
-
   class SimulationThread(val name: String, val t: Thread, scheduler: Scheduler, val semaphore: Semaphore) {
 
     def wake(): Unit = semaphore.release()

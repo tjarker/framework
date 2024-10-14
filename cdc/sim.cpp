@@ -49,10 +49,9 @@ extern "C" {
     SimulationContext * createSimContext(const char* name, const char* wave_file, const char* time_resolution);
     void destroySimContext(SimulationContext * id);
     void setInput(SimulationContext * ctx, uint64_t id, uint64_t val);
+    void tick(SimulationContext * ctx, uint32_t targetCycle);
     uint64_t getOutput(SimulationContext * ctx, uint64_t id);
-    void tick(SimulationContext * ctx);
 }
-
 
 
 SimulationContext * createSimContext(const char* name, const char* wave_file, const char* time_resolution) {
@@ -76,28 +75,33 @@ void destroySimContext(SimulationContext * ctx) {
 void setInput(SimulationContext * ctx, uint64_t id, uint64_t val) {
     switch (id) {
         case 0: ctx->model->clk_l = val; break;
-        case 1: ctx->model->clk_r = val; break;
-        case 2: ctx->model->rst_l = val; break;
-        case 3: ctx->model->rst_r = val; break;
-        case 4: ctx->model->req_l = val; break;
-        case 5: ctx->model->ack_r = val; break;
-        case 6: ctx->model->data_l = val; break;
+        case 1: ctx->model->rst_l = val; break;
+        case 2: ctx->model->req_l = val; break;
+        case 3: ctx->model->data_l = val; break;
+
+        case 5: ctx->model->clk_r = val; break;
+        case 6: ctx->model->rst_r = val; break;
+        case 7: ctx->model->ack_r = val; break;
     }
     invocations++;
 }
 
 uint64_t getOutput(SimulationContext * ctx, uint64_t id) {
     switch (id) {
-        case 0: return ctx->model->req_r;
-        case 1: return ctx->model->ack_l;
-        case 2: return ctx->model->data_r;
+        case 4: return ctx->model->ack_l;
+        case 8: return ctx->model->req_r;
+        case 9: return ctx->model->data_r;
     }
     invocations++;
 }
 
-void tick(SimulationContext * ctx) {
-    ctx->model->eval();
-    ctx->tfp->dump(ctx->contextp->time());
-    ctx->contextp->timeInc(1);
+void tick(SimulationContext * ctx, uint32_t targetCycle) {
+    while (ctx->contextp->time() < targetCycle) {
+        ctx->model->eval();
+        ctx->tfp->dump(ctx->contextp->time());
+        ctx->contextp->timeInc(1);
+        ctx->tfp->flush();
+    }
+    
     invocations++;
 }

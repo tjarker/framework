@@ -6,29 +6,34 @@ import Time.*
 import Types.*
 import Module.*
 
-
 object SimController {
 
-  type Tick = Long
-
-  enum Event(val timestamp: Long) {
-    case Drive(t: Tick, p: Input[Bits], value: BigInt) extends Event(t)
-    case PosEdge(t: Tick, cd: ClockDomain) extends Event(t)
-    case NegEdge(t: Tick, cd: ClockDomain) extends Event(t)
-  }
+  
 
 }
 
-class SimController(dut: Module) {
+class SimController(dut: Module, timeUnit: Time) {
+
+
+  enum Event(val timestamp: AbsoluteTime) {
+    case Drive(t: AbsoluteTime, p: Input[Bits], value: BigInt) extends Event(t)
+    case PosEdge(t: AbsoluteTime, cd: ClockDomain) extends Event(t)
+    case NegEdge(t: AbsoluteTime, cd: ClockDomain) extends Event(t)
+
+    override def toString(): String = {
+      this match {
+        case Drive(t, p, value) => s"${p.name} = $value"
+        case PosEdge(t, cd)     => s"${cd.clock.name} up"
+        case NegEdge(t, cd)     => s"${cd.clock.name} down"
+      }
+    }
+  }
 
   import SimController.*
 
-  val timeUnit = 1.ns
-  var currentSimTick: Tick = 0
+  dut.ctrl = this
 
-  extension (c: Input[Clock]) {
-    def periodInTicks: Tick = c.period / timeUnit
-  }
+  val simTime: SimulationTime = SimulationTime(() => doTick)
 
   val sim =
     VerilatorInterface(
@@ -38,107 +43,147 @@ class SimController(dut: Module) {
       timeUnit
     )
 
-  val events =
-    mutable.PriorityQueue[Event]()(Ordering.by(-_.timestamp))
+  val scheduler = Scheduler(simTime, doTick)
+  scheduler.addMainThread()
 
-  val nextNegEdge = mutable.Map[ClockDomain, Tick]()
-  dut.domains.foreach { cd =>
-    nextNegEdge(cd) = 0
+  // clock edge and drive events
+  val events = mutable.PriorityQueue[Event]()(
+    Ordering.by(e =>
+      (
+        -e.timestamp.fs,
+        e match {
+          case _: Event.Drive => 1
+          case _              => 0
+        }
+      )
+    )
+  )
+
+  // used to schedule drive events, since they are scheduled
+  // relative to the next negative edge of their clock domain
+  val nextNegEdge = mutable.Map[ClockDomain, AbsoluteTime]()
+
+  val driveSkewTable = dut.inputs.map { i =>
+    i -> i.driveSkew / timeUnit
+  }.toMap
+
+  val state = mutable.Map[Port[Bits], BigInt]()
+  dut.ports.foreach { p =>
+    state(p) = 0
   }
 
-  dut.ctrl = this
-
+  // simulation starts at a negative edge
   dut.domains.foreach { cd =>
-    events.enqueue(Event.PosEdge(cd.clock.periodInTicks / 2, cd))
+    nextNegEdge(cd) = 0.fs.absolute
+  }
+
+  // schedule the first positive edge for each clock domain
+  dut.domains.foreach { cd =>
+    events.enqueue(Event.PosEdge(cd.halfPeriod.absolute, cd))
   }
 
   println(s"SimController for ${dut.name} created")
-  println(dut.domains.map(_.toString()).mkString("\n"))
-  println(dut.domains.head.ports.zipWithIndex.map { case (p, i) => s"$i: $p" }.mkString("\n"))
+  println(s"Ports:")
+  println(
+    dut.ports.zipWithIndex
+      .map { case (p, i) => s"  $i: $p" }
+      .mkString("\n")
+  )
+
+  // ==========================================================================
+  // Public API
 
   def peek(p: Port[Bits]): BigInt = {
+    println(s"[Ctrl] peeking ${p.name}")
     p match
       case Input(t)  => sim.peekInput(dut.portToId(p))
       case Output(t) => sim.peekOutput(dut.portToId(p))
-
-  }
-
-  def executeEvent(e: Event): Unit = {
-    e match {
-      case Event.Drive(t, p, value) => sim.pokeInput(dut.portToId(p), value)
-      case Event.PosEdge(t, cd) => 
-        sim.pokeInput(dut.portToId(cd.clock), 1)
-        events.enqueue(Event.NegEdge(currentSimTick + cd.clock.periodInTicks / 2, cd))
-        nextNegEdge(cd) = currentSimTick + cd.clock.periodInTicks / 2
-      case Event.NegEdge(t, cd) => 
-        sim.pokeInput(dut.portToId(cd.clock), 0)
-        events.enqueue(Event.PosEdge(currentSimTick + cd.clock.periodInTicks / 2, cd))
-    }
   }
 
   def poke(p: Input[Bits], value: BigInt): Unit = {
 
     val cd = dut.portToClockDomain(p)
 
-    val signalChangeTick = nextNegEdge(cd) + p.driveSkew / timeUnit
-    
-    val e = Event.Drive(signalChangeTick, p, value)
+    val signalChangeTick = nextNegEdge(cd) + p.driveSkew
 
-    println(s"Enqueuing event: $e")
-
-    events.enqueue(e)
+    events.enqueue(Event.Drive(signalChangeTick.absolute, p, value))
 
     // TODO: add multi drive detection in same tick (could be done by having a dirty bit map for ports)
   }
 
-  def doTick(ticks: Long) = {
+  def step(clock: Input[Clock], steps: Int): Unit = {
 
-    println(s"doTick($ticks)")
+    val cd = dut.portToClockDomain(clock)
 
-    println(s"events: ${events.mkString(", ")}")
+    println(s"[Ctrl] stepping ${steps} ticks on ${cd.clock.name}")
 
-    val targetTick = currentSimTick + ticks
-
-    while (events.nonEmpty && events.head.timestamp <= targetTick) {
-      val e = events.dequeue()
-      println(s"Executing event: $e")
-
-      if (e.timestamp < currentSimTick) throw new Exception("Event timestamp is in the past")
-
-      if (e.timestamp > currentSimTick) {
-        sim.tick((e.timestamp - currentSimTick).toInt)
-        dut.time.inc((e.timestamp - currentSimTick).fs)
-        println(s"had to advance time to ${e.timestamp}")
-        currentSimTick = e.timestamp
-      }
-
-      if (currentSimTick > 800) throw new Exception("Timeout")
-
-      executeEvent(e)
-    }
+    scheduler.sleepUntil((simTime + cd.period * steps).absolute)
   }
 
   def tick(t: Time): Unit = {
-    if (t < timeUnit) throw Exception("Time must be greater than time unit")
 
-    val ticks = (t / timeUnit).toInt
-
-    doTick(ticks)
+    scheduler.sleepUntil((simTime + t).absolute)
   }
 
-  def step(cd: Input[Clock], steps: Int): Unit = {
-    if (dut.time > timeUnit * 100) throw new Exception("Timeout")
+  // ==========================================================================
 
-    println(s"Stepping $steps ticks ${cd.periodInTicks}")
-    //sim.stepClockDomain(dut.clockToClockDomain(cd), steps)
-    doTick(cd.periodInTicks * steps)
-    // printState()
+  // ==========================================================================
+  // Private methods
+
+  // apply the action associated with the evnt (clock edge or drive)
+  private def executeEvent(e: Event): Unit = {
+    e match {
+      case Event.Drive(t, p, value) => sim.pokeInput(dut.portToId(p), value)
+
+      case Event.PosEdge(t, cd) =>
+        sim.pokeInput(dut.portToId(cd.clock), 1)
+        events.enqueue(
+          Event.NegEdge((simTime + cd.halfPeriod).absolute, cd)
+        )
+        nextNegEdge(cd) = (simTime + cd.halfPeriod).absolute
+
+      case Event.NegEdge(t, cd) =>
+        sim.pokeInput(dut.portToId(cd.clock), 0)
+        events.enqueue(
+          Event.PosEdge((simTime + cd.halfPeriod).absolute, cd)
+        )
+    }
   }
 
-  def printState(): Unit = {
-    println("State:")
-    dut.ports.foreach { p =>
-      println(s"${p}: ${peek(p)}")
+  // advance simulation time to the target tick
+  // applying all scheduled events along the way
+  private def doTick(until: AbsoluteTime) = {
+
+    println(s"[Ctrl] executing until ${until}")
+
+    while (events.nonEmpty && events.head.timestamp <= until) {
+
+      println(s"Queued events:")
+      println(
+        events
+          .map {
+            case Event.Drive(t, p, value) => s"  $t: ${p.name} = $value"
+            case Event.PosEdge(t, cd)     => s"  $t: ${cd.clock.name} up"
+            case Event.NegEdge(t, cd)     => s"  $t: ${cd.clock.name} down"
+          }
+          .mkString("\n")
+      )
+
+      val e = events.dequeue()
+
+      if (e.timestamp < simTime)
+        throw new Exception("Event timestamp is in the past")
+
+      if (e.timestamp > simTime) {
+        sim.tick(e.timestamp)
+        dut.time.set(e.timestamp)
+        println(s"@${dut.time}")
+      }
+
+      if (simTime > 1000.ns) throw new Exception("Timeout")
+
+      println(e)
+      executeEvent(e)
     }
   }
 

@@ -50,7 +50,7 @@ extern "C" {
     SimulationContext * createSimContext(const char* name, const char* wave_file, const char* time_resolution);
     void destroySimContext(SimulationContext * id);
     void setInput(SimulationContext * ctx, uint64_t id, uint64_t val);
-    void tick(SimulationContext * ctx, uint32_t cycles);
+    void tick(SimulationContext * ctx, uint32_t targetCycle);
     uint64_t getOutput(SimulationContext * ctx, uint64_t id);
 }
 
@@ -121,8 +121,8 @@ uint64_t getOutput(SimulationContext * ctx, uint64_t id) {
     invocations++;
 }
 
-void tick(SimulationContext * ctx, uint32_t cycles) {
-    for (uint32_t i = 0; i < cycles; i++) {
+void tick(SimulationContext * ctx, uint32_t targetCycle) {
+    while (ctx->contextp->time() < targetCycle) {
         ctx->GCD->eval();
         ctx->tfp->dump(ctx->contextp->time());
         ctx->contextp->timeInc(1);

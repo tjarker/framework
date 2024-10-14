@@ -1,17 +1,22 @@
 package framework
 
 import framework.Time
+import framework.Time.*
 
-class SimulationTime(tick: () => (Time => Unit)) extends Time {
+class SimulationTime(ticker: () => (AbsoluteTime => Unit)) extends AbsoluteTime {
 
     this.valueFs = 0
 
     def tick(t: Time): Unit = {
-        tick()(t)
+        ticker()((this + t).absolute)
     }
 
-    def inc(t: Time): Unit = {
+    private[framework] def inc(t: RelativeTime): Unit = {
         this.valueFs += t.valueFs
+    }
+
+    private[framework] def set(t: AbsoluteTime): Unit = {
+        this.valueFs = t.valueFs
     }
 
 }

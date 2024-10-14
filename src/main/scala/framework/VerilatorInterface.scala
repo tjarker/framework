@@ -15,7 +15,7 @@ object VerilatorInterface {
     def destroySimContext(ctx: Pointer): Unit
     def setInput(ctx: Pointer, id: Long, value: Long): Unit
     def getOutput(ctx: Pointer, id: Long): Long
-    def tick(ctx: Pointer, cycles: Int): Unit
+    def tick(ctx: Pointer, targetCycle: Long): Unit
   }
 }
 
@@ -38,7 +38,7 @@ class VerilatorInterface(
 
   val inVals = collection.mutable.Map[Long, BigInt]()
 
-  def tick(n: Int = 1) = lib.tick(ctx, n)
+  def tick(until: AbsoluteTime) = lib.tick(ctx, until.fs / timeUnit.fs)
 
   private def setInput(id: Long, value: Long) = lib.setInput(ctx, id, value)
 

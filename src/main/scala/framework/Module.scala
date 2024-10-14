@@ -24,6 +24,9 @@ trait Module(val libPath: String) {
 
   lazy val ports = domains.flatMap(_.ports)
 
+  def inputs = ports.collect { case i: Input[_] => i }
+  def outputs = ports.collect { case o: Output[_] => o }
+
   lazy val portToId = ports.zipWithIndex.toMap
 
   lazy val idToPort = portToId.map(_.swap)
@@ -45,9 +48,10 @@ trait Module(val libPath: String) {
     () => ctrl.step
   )
 
-  var time: SimulationTime = SimulationTime(() => ctrl.tick)
+  lazy val time: SimulationTime = ctrl.simTime
 
   def destroy(): Unit = {
+    ctrl.scheduler.killAll()
     ctrl.sim.destroy()
   }
 

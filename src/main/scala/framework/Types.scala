@@ -49,23 +49,52 @@ object Types {
     val name: String
   }
 
-  class Output[+T <: Bits](val name: String, val t: T)(using val ctx: ModuleBuilderContext)
+  class Output[+T <: Bits](val name: String, val t: T, val ctx: ModuleBuilderContext)
       extends Port[T] {
     val width = t.width
 
     override def toString(): String = s"out $name: $t"
   }
   object Output {
+
+    import scala.quoted.*
+
+    private def outputWithImplicitName[T <: Bits](t: Expr[T], ctx: Expr[ModuleBuilderContext])(using Quotes, Type[T]): Expr[Output[T]] = {
+      '{ new Output[T](${Naming.enclosingTermName}, $t, $ctx) }
+    }
+
+    inline def apply[T <: Bits](t: T)(using ctx: ModuleBuilderContext): Output[T] = {
+      ${ outputWithImplicitName('t, 'ctx) }
+    }
+
+    def apply[T <: Bits](name: String, t: T)(using ctx: ModuleBuilderContext): Output[T] = {
+      new Output(name, t, ctx)
+    }
+
     def unapply[T <: Bits](o: Output[T]): Option[(String, T)] = Some(o.name, o.t)
   }
 
-  class Input[+T <: Bits](val name: String, val t: T, val driveSkew: Time = 0.fs)(using val ctx: ModuleBuilderContext)
+  class Input[+T <: Bits](val name: String, val t: T, val driveSkew: Time, val ctx: ModuleBuilderContext)
       extends Port[T] {
     val width = t.width
 
     override def toString: String = s"in $name: $t"
   }
   object Input {
+
+    import scala.quoted.*
+    private def inputWithImplicitName[T <: Bits](t: Expr[T], driveSkew: Expr[Time], ctx: Expr[ModuleBuilderContext])(using Quotes, Type[T]): Expr[Input[T]] = {
+      '{ new Input[T](${Naming.enclosingTermName}, $t, $driveSkew, $ctx) }
+    }
+
+    inline def apply[T <: Bits](t: T, driveSkew: Time = 0.fs)(using ctx: ModuleBuilderContext): Input[T] = {
+      ${ inputWithImplicitName('t, 'driveSkew, 'ctx) }
+    }
+
+    def apply[T <: Bits](name: String, t: T, driveSkew: Time)(using ctx: ModuleBuilderContext): Input[T] = {
+      new Input(name, t, driveSkew, ctx)
+    }
+
     def unapply[T <: Bits](i: Input[T]): Option[(String, T)] = Some(i.name, i.t)
   }
 

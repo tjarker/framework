@@ -34,13 +34,15 @@ object Time {
     t.valueFs = value * math.pow(10, unit.exp).toLong
     t
   }
+
+  class AbsoluteTime extends Time
+  class RelativeTime extends Time
+
 }
 
-class Time extends Ordered[Time] {
+class Time(private[framework] var valueFs: Long = 0) extends Ordered[Time] {
 
   import Time.TimeUnit
-
-  private[framework] var valueFs: Long = 0
 
   def +(that: Time): Time = {
     Time(valueFs + that.valueFs, TimeUnit.fs)
@@ -84,4 +86,28 @@ class Time extends Ordered[Time] {
   override def compare(that: Time): Int = {
     this.valueFs.compare(that.valueFs)
   }
+
+  def ==(that: Time): Boolean = {
+    this.valueFs == that.valueFs
+  }
+
+  def fs: Long = valueFs
+  def ps: Long = valueFs / 1000
+  def ns: Long = valueFs / 1000000
+  def us: Long = valueFs / 1000000000
+  def ms: Long = valueFs / 1000000000000L
+  def s: Long = valueFs / 1000000000000000L
+
+  def absolute: Time.AbsoluteTime = {
+    val t = new Time.AbsoluteTime
+    t.valueFs = valueFs
+    t
+  }
+
+  def relative: Time.RelativeTime = {
+    val t = new Time.RelativeTime
+    t.valueFs = valueFs
+    t
+  }
+
 }
