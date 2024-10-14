@@ -1,6 +1,6 @@
 
 import framework.*
-import framework.Types.*
+import framework.types.*
 import framework.Time.*
 
 import scala.collection.mutable

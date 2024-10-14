@@ -6,7 +6,7 @@ import framework.*
 import framework.Time.*
 import framework.Module
 import framework.SimController
-import framework.Types.*
+import framework.types.*
 import framework.ClockDomain
 
 import java.nio.file.Path

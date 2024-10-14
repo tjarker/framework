@@ -3,7 +3,7 @@ package framework
 import scala.collection.mutable
 
 import framework.*
-import framework.Types.*
+import framework.types._
 import framework.Module.ModuleBuilderContext
 import framework.ClockDomain
 import framework.Time.*

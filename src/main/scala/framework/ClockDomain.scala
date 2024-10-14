@@ -2,7 +2,7 @@ package framework
 
 import scala.collection.mutable
 
-import Types.*
+import framework.types.*
 
 case class ClockDomain(
     val clock: Input[Clock],

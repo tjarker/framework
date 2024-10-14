@@ -3,7 +3,7 @@ package framework
 import collection.mutable
 
 import Time.*
-import Types.*
+import types.*
 import Module.*
 
 object SimController {
