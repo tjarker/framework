@@ -50,8 +50,10 @@ extern "C" {
     SimulationContext * createSimContext(const char* name, const char* wave_file, const char* time_resolution);
     void destroySimContext(SimulationContext * id);
     void setInput(SimulationContext * ctx, uint64_t id, uint64_t val);
+    void setInputWide(SimulationContext * ctx, uint64_t id, uint64_t val[]);
     void tick(SimulationContext * ctx, uint32_t targetCycle);
     uint64_t getOutput(SimulationContext * ctx, uint64_t id);
+    void getOutputWide(SimulationContext * ctx, uint64_t id, uint64_t val[]);
 }
 
 void eval(bool_cb cb) {
@@ -106,19 +108,37 @@ void setInput(SimulationContext * ctx, uint64_t id, uint64_t val) {
         case 0: ctx->GCD->clock = val; break;
         case 1: ctx->GCD->reset = val; break;
         case 2: ctx->GCD->req = val; break;
-        case 3: ctx->GCD->loadVal = val; break;
     }
     ctx->GCD->eval();
     invocations++;
 }
 
+void setInputWide(SimulationContext * ctx, uint64_t id, uint64_t val[]) {
+    switch(id) {
+        case 3: 
+            for (int i = 0; i < 4; i++) {
+                ctx->GCD->loadVal.data()[i] = val[i];
+            }
+            break;
+    }
+}
+
 uint64_t getOutput(SimulationContext * ctx, uint64_t id) {
     switch (id) {
         case 4: return ctx->GCD->ack;
-        case 5: return ctx->GCD->result;
     }
     
     invocations++;
+}
+
+void getOutputWide(SimulationContext * ctx, uint64_t id, uint64_t val[]) {
+    switch(id) {
+        case 5:
+            for (int i = 0; i < 4; i++) {
+                val[i] = ctx->GCD->result.data()[i];
+            }
+            break;
+    }
 }
 
 void tick(SimulationContext * ctx, uint32_t targetCycle) {

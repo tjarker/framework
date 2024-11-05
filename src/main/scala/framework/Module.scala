@@ -9,11 +9,7 @@ import framework.ClockDomain
 import framework.Time.*
 
 object Module {
-  class ModuleBuilderContext(
-      val peek: () => (Port[Bits] => BigInt),
-      val poke: () => ((Input[Bits], BigInt) => Unit),
-      val step: () => ((Input[Clock], Int) => Unit)
-  )
+  class ModuleBuilderContext
 }
 
 trait Module(val libPath: String) {
@@ -41,18 +37,9 @@ trait Module(val libPath: String) {
     }
   }.toMap
 
-  var ctrl: SimController = null
-  given ModuleBuilderContext = ModuleBuilderContext(
-    () => ctrl.peek,
-    () => ctrl.poke,
-    () => ctrl.step
-  )
+  given ModuleBuilderContext = new ModuleBuilderContext
 
-  lazy val time: SimulationTime = ctrl.simTime
 
-  def destroy(): Unit = {
-    ctrl.scheduler.killAll()
-    ctrl.sim.destroy()
-  }
+  def time: SimulationTime = Simulation.time
 
 }

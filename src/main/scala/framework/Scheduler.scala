@@ -32,6 +32,8 @@ class Scheduler(now: => AbsoluteTime, advance: AbsoluteTime => Unit) {
 
   import Scheduler.*
 
+  def info(msg: String): Unit = Simulation.info("sched", msg)
+
   val wakeTimes = mutable.Map[SimulationThread, AbsoluteTime]()
   val threads = mutable.ArrayBuffer[SimulationThread]()
   val threadToSimThread = mutable.Map[Thread, SimulationThread]()
@@ -65,23 +67,23 @@ class Scheduler(now: => AbsoluteTime, advance: AbsoluteTime => Unit) {
     wakeTimes -= src
     threadToSimThread -= Thread.currentThread()
 
-    println(s"[Sched] $src requests retirement")
+    info(s"$src requests retirement")
     scheduleNewThread(src, false)
-    println(s"[Sched] retiring $src")
+    info(s"retiring $src")
   }
 
   def advanceTime(to: AbsoluteTime): Unit = {
     advance(to)
-    println(s"\n\n[Time] $to")
+    //println(s"\n\n$to")
   }
 
   def scheduleNewThread(old: SimulationThread, keepAlive: Boolean = true) = {
 
-    println(s"[Sched] scheduling new thread")
-    println(s"[Sched] ${haveToRunInThisTick}")
+    info(s"scheduling new thread")
+    info(s"${haveToRunInThisTick}")
 
     if (haveToRunInThisTick.isEmpty) {
-      println("[Sched] No more work for this tick")
+      info("No more work for this tick")
       advanceTime(nextTickToBeScheduled)
     }
 
@@ -94,10 +96,10 @@ class Scheduler(now: => AbsoluteTime, advance: AbsoluteTime => Unit) {
     if (next != old) {
       next.wake()
 
-      println(s"[Sched] switching $old -> $next")
+      info(s"switching $old -> $next")
       if (keepAlive) old.semaphore.acquire()
     } else {
-      println(s"[Sched] keeping $old running")
+      info(s"keeping $old running")
     }
 
 
@@ -108,7 +110,7 @@ class Scheduler(now: => AbsoluteTime, advance: AbsoluteTime => Unit) {
 
     val src = threadToSimThread(Thread.currentThread())
 
-    println(s"[Sched] $src sleeps until ${until}")
+    info(s"$src sleeps until ${until}")
     wakeTimes(src) = until
 
     scheduleNewThread(src)
@@ -130,7 +132,7 @@ class Scheduler(now: => AbsoluteTime, advance: AbsoluteTime => Unit) {
     threads.foreach {
       case SimulationThread(name, t) =>
         if (name != "main") {
-          println(s"[Sched] killing $name")
+          info(s"killing $name")
           t.interrupt()
         }
     }
@@ -140,7 +142,7 @@ class Scheduler(now: => AbsoluteTime, advance: AbsoluteTime => Unit) {
     threads.foreach {
       case SimulationThread(name, t) =>
         if (name != "main") {
-          println(s"[Sched] joining $name")
+          info(s"joining $name")
           t.join()
         }
     }

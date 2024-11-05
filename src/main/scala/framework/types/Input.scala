@@ -17,19 +17,10 @@ class Input[+T <: Bits](
 }
 object Input {
 
-  import scala.quoted.*
-  private def inputWithImplicitName[T <: Bits](
-      t: Expr[T],
-      driveSkew: Expr[Time],
-      ctx: Expr[ModuleBuilderContext]
-  )(using Quotes, Type[T]): Expr[Input[T]] = {
-    '{ new Input[T](${ Naming.enclosingTermName }, $t, $driveSkew, $ctx) }
-  }
-
   inline def apply[T <: Bits](t: T, driveSkew: Time = 0.fs)(using
       ctx: ModuleBuilderContext
   ): Input[T] = {
-    ${ inputWithImplicitName('t, 'driveSkew, 'ctx) }
+    new Input(Naming.enclosingTermName, t, driveSkew, ctx)
   }
 
   def apply[T <: Bits](name: String, t: T, driveSkew: Time)(using

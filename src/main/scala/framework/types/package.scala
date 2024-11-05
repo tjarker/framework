@@ -1,6 +1,5 @@
 package framework
 
-import scala.quoted.Type
 
 package object types {
 
@@ -13,6 +12,7 @@ package object types {
 
   case class Width(width: Int) {
     override def toString(): String = s"${width - 1}:0"
+    def toInt: Int = width
   }
 
   extension (w: Int) {
@@ -27,32 +27,32 @@ package object types {
 
   extension [T <: Data](p: Port[T]) {
     def peek: BigInt = {
-      p.ctx.peek.apply().apply(p)
+      Simulation.peek(p)
     }
   }
 
   extension [T <: Data](p: Input[T]) {
     def poke(value: BigInt): Unit = {
-      p.ctx.poke.apply().apply(p, value)
+      Simulation.poke(p, value)
     }
   }
 
   extension (p: Input[Clock]) {
     def step(steps: Int = 1): Unit = {
-      p.ctx.step.apply().apply(p, steps)
+      Simulation.step(p, steps)
     }
     def period = p.t.period
   }
 
   extension (p: Input[Reset]) {
     def assert(): Unit = {
-      p.ctx.poke.apply().apply(p, 1)
+      Simulation.poke(p, 1)
     }
     def deassert(): Unit = {
-      p.ctx.poke.apply().apply(p, 0)
+      Simulation.poke(p, 0)
     }
     def peek: BigInt = {
-      p.ctx.peek.apply().apply(p)
+      Simulation.peek(p)
     }
   }
   

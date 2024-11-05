@@ -14,19 +14,11 @@ class Output[+T <: Bits](
 }
 object Output {
 
-  import scala.quoted.*
-
-  private def outputWithImplicitName[T <: Bits](
-      t: Expr[T],
-      ctx: Expr[ModuleBuilderContext]
-  )(using Quotes, Type[T]): Expr[Output[T]] = {
-    '{ new Output[T](${ Naming.enclosingTermName }, $t, $ctx) }
-  }
 
   inline def apply[T <: Bits](
       t: T
   )(using ctx: ModuleBuilderContext): Output[T] = {
-    ${ outputWithImplicitName('t, 'ctx) }
+    new Output(Naming.enclosingTermName, t, ctx)
   }
 
   def apply[T <: Bits](name: String, t: T)(using

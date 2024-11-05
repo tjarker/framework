@@ -1,4 +1,3 @@
-
 import framework.*
 import framework.types.*
 import framework.Time.*
@@ -41,70 +40,70 @@ import scala.collection.mutable
     )
   }
 
-  val cdc = simulate(Cdc(), 1.ns)
+  Simulation(Cdc(), 1.ns, debug = true) { cdc =>
+    
+    println(cdc.domains.mkString("\n"))
 
-  println(cdc.domains.mkString("\n"))
+    println(cdc.ports.mkString("\n"))
 
-  println(cdc.ports.mkString("\n"))
+    Simulation.fork("left") {
 
-  cdc.ctrl.scheduler.addThread("left") {
+      cdc.rst_l.assert()
+      cdc.req_l.poke(0)
+      cdc.data_l.poke(0)
 
-    cdc.rst_l.assert()
-    cdc.req_l.poke(0)
-    cdc.data_l.poke(0)
-
-    cdc.clk_l.step()
-
-    cdc.rst_l.deassert()
-
-    cdc.clk_l.step()
-
-    cdc.req_l.poke(1)
-    cdc.data_l.poke(42)
-
-    while (cdc.ack_l.peek == 0) {
       cdc.clk_l.step()
-    }
 
-    cdc.req_l.poke(0)
-    cdc.data_l.poke(0)
+      cdc.rst_l.deassert()
 
-    while (cdc.ack_l.peek != 0) {
       cdc.clk_l.step()
+
+      cdc.req_l.poke(1)
+      cdc.data_l.poke(42)
+
+      while (cdc.ack_l.peek == 0) {
+        cdc.clk_l.step()
+      }
+
+      cdc.req_l.poke(0)
+      cdc.data_l.poke(0)
+
+      while (cdc.ack_l.peek != 0) {
+        cdc.clk_l.step()
+      }
+
     }
 
-  }
+    Simulation.fork("right") {
 
-  cdc.ctrl.scheduler.addThread("right") {
+      cdc.rst_r.assert()
+      cdc.ack_r.poke(0)
 
-    cdc.rst_r.assert()
-    cdc.ack_r.poke(0)
-
-    cdc.clk_r.step()
-
-    cdc.rst_r.deassert()
-
-    cdc.clk_r.step()
-
-    while (cdc.req_r.peek == 0) {
       cdc.clk_r.step()
-    }
 
-    val res = cdc.data_r.peek
+      cdc.rst_r.deassert()
 
-    cdc.clk_r.step()
-
-    cdc.ack_r.poke(1)
-
-    while (cdc.req_r.peek != 0) {
       cdc.clk_r.step()
+
+      while (cdc.req_r.peek == 0) {
+        cdc.clk_r.step()
+      }
+
+      val res = cdc.data_r.peek
+
+      cdc.clk_r.step()
+
+      cdc.ack_r.poke(1)
+
+      while (cdc.req_r.peek != 0) {
+        cdc.clk_r.step()
+      }
+
+      cdc.ack_r.poke(0)
+
     }
 
-    cdc.ack_r.poke(0)
-
+    cdc.clk_r.step(40)
   }
-
-  cdc.clk_r.step(15)
-  cdc.ctrl.scheduler.joinAll()
 
 }

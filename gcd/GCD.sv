@@ -1,5 +1,5 @@
 module GCD #(
-    parameter int W = 16
+    parameter int W = 128
 )(
     input  logic clock,
     input  logic reset,

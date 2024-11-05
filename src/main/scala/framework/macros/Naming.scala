@@ -4,7 +4,10 @@ import scala.quoted.*
 import scala.annotation.experimental
 
 object Naming {
-  def enclosingTermName(using Quotes): Expr[String] = {
+
+  inline def enclosingTermName: String = ${ enclosingTermNameImpl }
+
+  def enclosingTermNameImpl(using Quotes): Expr[String] = {
     import quotes.reflect._
     def enclosingTerm(sym: Symbol): Symbol = {
       sym match

@@ -8,13 +8,6 @@ import Module.*
 
 object SimController {
 
-  
-
-}
-
-class SimController(dut: Module, timeUnit: Time) {
-
-
   enum Event(val timestamp: AbsoluteTime) {
     case Drive(t: AbsoluteTime, p: Input[Bits], value: BigInt) extends Event(t)
     case PosEdge(t: AbsoluteTime, cd: ClockDomain) extends Event(t)
@@ -29,9 +22,17 @@ class SimController(dut: Module, timeUnit: Time) {
     }
   }
 
-  import SimController.*
+  
 
-  dut.ctrl = this
+}
+
+class SimController(dut: Module, timeUnit: Time) {
+
+
+  def info(msg: String): Unit = Simulation.info("ctrl", msg)
+
+
+  import SimController.*
 
   val simTime: SimulationTime = SimulationTime(() => doTick)
 
@@ -82,22 +83,19 @@ class SimController(dut: Module, timeUnit: Time) {
     events.enqueue(Event.PosEdge(cd.halfPeriod.absolute, cd))
   }
 
-  println(s"SimController for ${dut.name} created")
-  println(s"Ports:")
-  println(
-    dut.ports.zipWithIndex
+  info(s"SimController for ${dut.name} created")
+  info(s"Ports:" + dut.ports.zipWithIndex
       .map { case (p, i) => s"  $i: $p" }
-      .mkString("\n")
-  )
+      .mkString("\n"))
 
   // ==========================================================================
   // Public API
 
   def peek(p: Port[Bits]): BigInt = {
-    println(s"[Ctrl] peeking ${p.name}")
+    info(s"peeking ${p.name}")
     p match
       case Input(t)  => sim.peekInput(dut.portToId(p))
-      case Output(t) => sim.peekOutput(dut.portToId(p))
+      case Output(t) => sim.peekOutput(dut.portToId(p), p.width.toInt)
   }
 
   def poke(p: Input[Bits], value: BigInt): Unit = {
@@ -115,7 +113,7 @@ class SimController(dut: Module, timeUnit: Time) {
 
     val cd = dut.portToClockDomain(clock)
 
-    println(s"[Ctrl] stepping ${steps} ticks on ${cd.clock.name}")
+    info(s"stepping ${steps} ticks on ${cd.clock.name}")
 
     scheduler.sleepUntil((simTime + cd.period * steps).absolute)
   }
@@ -133,17 +131,17 @@ class SimController(dut: Module, timeUnit: Time) {
   // apply the action associated with the evnt (clock edge or drive)
   private def executeEvent(e: Event): Unit = {
     e match {
-      case Event.Drive(t, p, value) => sim.pokeInput(dut.portToId(p), value)
+      case Event.Drive(t, p, value) => sim.pokeInput(dut.portToId(p), value, p.width.toInt)
 
       case Event.PosEdge(t, cd) =>
-        sim.pokeInput(dut.portToId(cd.clock), 1)
+        sim.pokeInput(dut.portToId(cd.clock), 1, 1)
         events.enqueue(
           Event.NegEdge((simTime + cd.halfPeriod).absolute, cd)
         )
         nextNegEdge(cd) = (simTime + cd.halfPeriod).absolute
 
       case Event.NegEdge(t, cd) =>
-        sim.pokeInput(dut.portToId(cd.clock), 0)
+        sim.pokeInput(dut.portToId(cd.clock), 0, 1)
         events.enqueue(
           Event.PosEdge((simTime + cd.halfPeriod).absolute, cd)
         )
@@ -154,20 +152,17 @@ class SimController(dut: Module, timeUnit: Time) {
   // applying all scheduled events along the way
   private def doTick(until: AbsoluteTime) = {
 
-    println(s"[Ctrl] executing until ${until}")
+    info(s"executing until ${until}")
 
     while (events.nonEmpty && events.head.timestamp <= until) {
 
-      println(s"Queued events:")
-      println(
-        events
+      info(s"Queued events:" + events
           .map {
             case Event.Drive(t, p, value) => s"  $t: ${p.name} = $value"
             case Event.PosEdge(t, cd)     => s"  $t: ${cd.clock.name} up"
             case Event.NegEdge(t, cd)     => s"  $t: ${cd.clock.name} down"
           }
-          .mkString("\n")
-      )
+          .mkString("\n"))
 
       val e = events.dequeue()
 
@@ -177,12 +172,12 @@ class SimController(dut: Module, timeUnit: Time) {
       if (e.timestamp > simTime) {
         sim.tick(e.timestamp)
         dut.time.set(e.timestamp)
-        println(s"@${dut.time}")
+        info(s"@${dut.time}")
       }
 
-      if (simTime > 1000.ns) throw new Exception("Timeout")
+      //if (simTime > 1000.ns) throw new Exception("Timeout")
 
-      println(e)
+      info(e.toString())
       executeEvent(e)
     }
   }

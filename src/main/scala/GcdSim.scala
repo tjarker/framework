@@ -21,8 +21,8 @@ import java.nio.file.Path
     val reset = Input(Reset())
     val req = Input(Bool(), driveSkew = 4.ns)
     val ack = Output(Bool())
-    val loadVal = Input(UInt(16.W), driveSkew = 3.ns)
-    val result = Output(UInt(16.W))
+    val loadVal = Input(UInt(128.W), driveSkew = 3.ns)
+    val result = Output(UInt(128.W))
 
     domains += ClockDomain(
       clock,
@@ -33,7 +33,6 @@ import java.nio.file.Path
   }
 
 
-  val gcd = simulate(Gcd(), 1.ns)
 
 
   def transact(gcd: Gcd, value: BigInt): BigInt = {
@@ -55,23 +54,24 @@ import java.nio.file.Path
     res
   }
 
+  Simulation(Gcd(), 1.ns, debug = false) { gcd => 
   
-  gcd.reset.assert()
-  gcd.req.poke(0)
-  gcd.loadVal.poke(0)
+    gcd.reset.assert()
+    gcd.req.poke(0)
+    gcd.loadVal.poke(0)
 
-  gcd.clock.step()
+    gcd.clock.step()
 
-  gcd.reset.deassert()
+    gcd.reset.deassert()
 
-  gcd.clock.step()
+    gcd.clock.step()
 
-  transact(gcd, 0x4444)
+    transact(gcd, BigInt("F123456789ABCDEF123456789ABCDEF1", 16))
 
-  val res = transact(gcd, 0x700C)
+    val res = transact(gcd, BigInt("123456789ABCDEF123456789ABCDEF12", 16))
 
-  println(s"Result: ${res}")
+    println(s"Result: ${res}")
 
-  gcd.destroy()
+  }
 
 }
