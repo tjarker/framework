@@ -1,4 +1,4 @@
-package framework
+package framework.macros
 
 import scala.quoted.*
 import scala.annotation.experimental
