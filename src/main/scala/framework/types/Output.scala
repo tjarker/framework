@@ -1,7 +1,7 @@
 package framework.types
 
 import framework.Module.ModuleBuilderContext
-import framework.Naming
+import framework.macros.Naming
 
 class Output[+T <: Bits](
     val name: String,

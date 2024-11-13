@@ -1,7 +1,7 @@
 package framework.types
 
 import framework.Module.ModuleBuilderContext
-import framework.Naming
+import framework.macros.Naming
 import framework.Time
 import framework.Time.fs
 
