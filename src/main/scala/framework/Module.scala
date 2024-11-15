@@ -2,26 +2,45 @@ package framework
 
 import scala.collection.mutable
 
-import framework.*
-import framework.types._
-import framework.Module.ModuleBuilderContext
-import framework.ClockDomain
-import framework.Time.*
+import types.*
+import Time.*
 
 object Module {
-  class ModuleBuilderContext
+
+  case class ModuleBuilderContext(ports: mutable.ArrayBuffer[Port[Bits]]) {
+    def register[T <: Port[Bits]](port: T): T = {
+      ports += port.asInstanceOf[Port[Bits]]
+      port
+    }
+  }
+
+  case class ClockDomain(
+      clock: ClockPort,
+      ports: Seq[Port[Bits]]
+  ) {
+
+    def period: Time = clock.period
+
+    def halfPeriod: Time = clock.period / 2
+
+    override def toString(): String = {
+      s"ClockDomain(${clock}, ${ports.mkString("[", ", ", "]")})"
+    }
+  }
 }
 
 trait Module(val libPath: String) {
 
-  val name: String
+  import Module.*
+
+  val ctx = ModuleBuilderContext(mutable.ArrayBuffer())
+  given ModuleBuilderContext = ctx
+
+  def name: String = this.getClass.getSimpleName
 
   val domains = mutable.ArrayBuffer[ClockDomain]()
 
-  lazy val ports = domains.flatMap(_.ports)
-
-  def inputs = ports.collect { case i: Input[_] => i }
-  def outputs = ports.collect { case o: Output[_] => o }
+  lazy val ports = ctx.ports.toSeq
 
   lazy val portToId = ports.zipWithIndex.toMap
 
@@ -37,9 +56,24 @@ trait Module(val libPath: String) {
     }
   }.toMap
 
-  given ModuleBuilderContext = new ModuleBuilderContext
+  def time(using s: Sim): SimulationTime = s.time
 
+  def domain(clk: ClockPort)(ports: Port[Bits]*): Unit = {
+    val cd = ClockDomain(
+      clk,
+      ports
+    )
+    domains += cd
+  }
 
-  def time: SimulationTime = Simulation.time
+  def domain(clk: ClockPort, reset: ResetPort)(
+      ports: Port[Bits]*
+  ): Unit = {
+    val cd = ClockDomain(
+      clk,
+      ports
+    )
+    domains += cd
+  }
 
 }

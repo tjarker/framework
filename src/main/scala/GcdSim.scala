@@ -2,40 +2,34 @@ import com.sun.jna.Native
 
 import scala.collection.mutable
 
+import gears.async.*
+
 import framework.*
-import framework.Time.*
-import framework.Module
-import framework.SimController
-import framework.types.*
-import framework.ClockDomain
+import types.*
+import Time.*
 
 import java.nio.file.Path
 
 @main def GcdSim(): Unit = {
 
-  class Gcd extends Module("./gcd/build/gcd_model.so") {
+  class GCD extends Module("./gcd/build/gcd_model.so") {
 
-    val name = "GCD"
-
-    val clock = Input(Clock(10.ns))
-    val reset = Input(Reset())
-    val req = Input(Bool(), driveSkew = 4.ns)
+    val clock = ClockPort(10.ns)
+    val reset = ResetPort()
+    val req = Input(Bool())
     val ack = Output(Bool())
-    val loadVal = Input(UInt(128.W), driveSkew = 3.ns)
+    val loadVal = Input(UInt(128.W))
     val result = Output(UInt(128.W))
 
-    domains += ClockDomain(
-      clock,
-      Some(reset),
-      mutable.ArrayBuffer[Input[Bits]](req, loadVal),
-      mutable.ArrayBuffer[Output[Bits]](ack, result)
+    domain(clock, reset)(
+      req, ack, loadVal, result
     )
   }
 
 
 
 
-  def transact(gcd: Gcd, value: BigInt): BigInt = {
+  def transact(gcd: GCD, value: BigInt)(using Sim, Async): BigInt = {
     gcd.loadVal.poke(value)
     gcd.req.poke(1)
 
@@ -54,7 +48,7 @@ import java.nio.file.Path
     res
   }
 
-  Simulation(Gcd(), 1.ns, debug = false) { gcd => 
+  Simulation(GCD(), 1.ns) { gcd => 
   
     gcd.reset.assert()
     gcd.req.poke(0)
@@ -65,6 +59,8 @@ import java.nio.file.Path
     gcd.reset.deassert()
 
     gcd.clock.step()
+
+    throw new Exception("Not implemented")
 
     transact(gcd, BigInt("F123456789ABCDEF123456789ABCDEF1", 16))
 

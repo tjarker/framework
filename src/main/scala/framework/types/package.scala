@@ -1,6 +1,8 @@
 package framework
 
 
+import gears.async.*
+
 package object types {
 
   trait TypeContext {
@@ -25,34 +27,42 @@ package object types {
 
   trait Data extends Bits
 
+
+  class Clock extends Bits {
+    val width = 1.W
+  }
+
+  class Reset extends Bits {
+    val width = 1.W
+  }
+
   extension [T <: Data](p: Port[T]) {
-    def peek: BigInt = {
-      Simulation.peek(p)
+    def peek(using Sim, Async): BigInt = {
+      summon[Sim].peek(p)
     }
   }
 
   extension [T <: Data](p: Input[T]) {
-    def poke(value: BigInt): Unit = {
-      Simulation.poke(p, value)
+    def poke(value: BigInt)(using Sim, Async): Unit = {
+      summon[Sim].poke(p, value)
     }
   }
 
-  extension (p: Input[Clock]) {
-    def step(steps: Int = 1): Unit = {
-      Simulation.step(p, steps)
+  extension (p: ClockPort) {
+    def step(steps: Int = 1)(using Sim, Async): Unit = {
+      summon[Sim].step(p, steps)
     }
-    def period = p.t.period
   }
 
-  extension (p: Input[Reset]) {
-    def assert(): Unit = {
-      Simulation.poke(p, 1)
+  extension (p: ResetPort) {
+    def assert()(using Sim, Async): Unit = {
+      summon[Sim].poke(p, 1)
     }
-    def deassert(): Unit = {
-      Simulation.poke(p, 0)
+    def deassert()(using Sim, Async): Unit = {
+      summon[Sim].poke(p, 0)
     }
-    def peek: BigInt = {
-      Simulation.peek(p)
+    def peek(using Sim, Async): BigInt = {
+      summon[Sim].peek(p)
     }
   }
   

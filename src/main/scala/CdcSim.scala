@@ -1,20 +1,18 @@
 import framework.*
-import framework.types.*
-import framework.Time.*
+import types.*
+import Time.*
 
 import scala.collection.mutable
 
 @main def CdcSim(): Unit = {
 
-  class Cdc extends Module("./cdc/build/libcdc.so") {
+  class CDC extends Module("./cdc/build/libcdc.so") {
 
-    val name = "CDC"
+    val clk_l = ClockPort(6.ns)
+    val clk_r = ClockPort(10.ns)
 
-    val clk_l = Input(Clock(6.ns))
-    val clk_r = Input(Clock(10.ns))
-
-    val rst_l = Input(Reset())
-    val rst_r = Input(Reset())
+    val rst_l = ResetPort()
+    val rst_r = ResetPort()
 
     val req_l = Input(Bool())
     val req_r = Output(Bool())
@@ -25,28 +23,23 @@ import scala.collection.mutable
     val data_l = Input(UInt(16.W))
     val data_r = Output(UInt(16.W))
 
-    domains += ClockDomain(
-      clk_l,
-      Some(rst_l),
-      mutable.ArrayBuffer[Input[Bits]](req_l, data_l),
-      mutable.ArrayBuffer[Output[Bits]](ack_l)
+    domain(clk_l, rst_l)(
+      req_l, data_l, ack_l
     )
 
-    domains += ClockDomain(
-      clk_r,
-      Some(rst_r),
-      mutable.ArrayBuffer[Input[Bits]](ack_r),
-      mutable.ArrayBuffer[Output[Bits]](req_r, data_r)
+    domain(clk_r, rst_r)(
+      req_r, data_r, ack_r
     )
+
   }
 
-  Simulation(Cdc(), 1.ns, debug = true) { cdc =>
+  Simulation(CDC(), 1.ns) { cdc =>
     
     println(cdc.domains.mkString("\n"))
 
     println(cdc.ports.mkString("\n"))
 
-    Simulation.fork("left") {
+    fork("left") {
 
       cdc.rst_l.assert()
       cdc.req_l.poke(0)
@@ -74,7 +67,7 @@ import scala.collection.mutable
 
     }
 
-    Simulation.fork("right") {
+    fork("right") {
 
       cdc.rst_r.assert()
       cdc.ack_r.poke(0)

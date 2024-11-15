@@ -1,7 +1,6 @@
 package framework
 
-import framework.Time
-import framework.Time.*
+import Time.*
 
 class SimulationTime(ticker: () => (AbsoluteTime => Unit)) extends AbsoluteTime {
 

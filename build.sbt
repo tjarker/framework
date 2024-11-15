@@ -5,3 +5,4 @@ libraryDependencies += "net.java.dev.jna" % "jna" % "5.14.0"
 
 
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % "test"
+libraryDependencies += "ch.epfl.lamp" %% "gears" % "0.2.0"
