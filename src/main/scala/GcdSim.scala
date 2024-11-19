@@ -60,7 +60,7 @@ import java.nio.file.Path
 
     gcd.clock.step()
 
-    throw new Exception("Not implemented")
+    //throw new Exception("Not implemented")
 
     transact(gcd, BigInt("F123456789ABCDEF123456789ABCDEF1", 16))
 

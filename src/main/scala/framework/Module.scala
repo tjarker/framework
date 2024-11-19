@@ -42,6 +42,10 @@ trait Module(val libPath: String) {
 
   lazy val ports = ctx.ports.toSeq
 
+  lazy val inputs = ports.collect { case p: Input[_] => p }
+
+  lazy val outputs = ports.collect { case p: Output[_] => p }
+
   lazy val portToId = ports.zipWithIndex.toMap
 
   lazy val idToPort = portToId.map(_.swap)
@@ -71,7 +75,7 @@ trait Module(val libPath: String) {
   ): Unit = {
     val cd = ClockDomain(
       clk,
-      ports
+      ports :+ reset
     )
     domains += cd
   }

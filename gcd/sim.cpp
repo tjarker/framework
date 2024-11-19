@@ -115,7 +115,7 @@ void setInput(SimulationContext * ctx, uint64_t id, uint64_t val) {
 
 void setInputWide(SimulationContext * ctx, uint64_t id, uint64_t val[]) {
     switch(id) {
-        case 3: 
+        case 4: 
             for (int i = 0; i < 4; i++) {
                 ctx->GCD->loadVal.data()[i] = val[i];
             }
@@ -125,7 +125,7 @@ void setInputWide(SimulationContext * ctx, uint64_t id, uint64_t val[]) {
 
 uint64_t getOutput(SimulationContext * ctx, uint64_t id) {
     switch (id) {
-        case 4: return ctx->GCD->ack;
+        case 3: return ctx->GCD->ack;
     }
     
     invocations++;

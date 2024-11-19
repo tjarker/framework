@@ -32,6 +32,8 @@ class VerilatorInterface(
 
   val lib = Native.load(libPath, classOf[VerilatorInterface.NativeCalls])
 
+  val log = Logger(true)
+
   val ctx = lib.createSimContext(
     dutName + "\u0000",
     waveFile + "\u0000",
@@ -43,9 +45,12 @@ class VerilatorInterface(
   def tick(until: AbsoluteTime) = lib.tick(ctx, until.fs / timeUnit.fs)
 
   private def setInput(id: Long, value: BigInt, width: Int) = {
+
     if (width > 64) {
+      log.info("verilator", s"Setting wide input $id to $value")
       lib.setInputWide(ctx, id, value.toLongArray(width))
     } else {
+      log.info("verilator", s"Setting input $id to $value")
       lib.setInput(ctx, id, value.toLong)
     }
   }
@@ -66,9 +71,13 @@ class VerilatorInterface(
     if (width > 64) {
       val arr = new Array[Long](width)
       lib.getOutputWide(ctx, id, arr)
-      arr.toBigInt
+      val r = arr.toBigInt
+      log.info("verilator", s"Getting wide output $id as $r")
+      r
     } else {
-      lib.getOutput(ctx, id)
+      val r = lib.getOutput(ctx, id)
+      log.info("verilator", s"Getting output $id as $r")
+      r
     }
   }
 
