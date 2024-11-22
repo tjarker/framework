@@ -2,10 +2,7 @@
 #include "VGCD.h"       // Generated Verilated model header
 #include "verilated.h"       // Verilator functions
 #include "verilated_vcd_c.h" // VCD tracing support
-#include <unordered_map>
 #include "stdint.h"
-
-
 
 
 class SimulationContext {
@@ -37,14 +34,6 @@ class SimulationContext {
     }
 };
 
-typedef bool (*bool_cb)(void);
-
-// arbitrary simulation event callback taking in all outputs and returning a boolean
-typedef bool (*event_cb)(uint64_t[]);
-
-const uint32_t NUM_OUTPUTS = 2;
-
-uint64_t invocations = 0;
 
 extern "C" {
     SimulationContext * createSimContext(const char* name, const char* wave_file, const char* time_resolution);
@@ -56,50 +45,25 @@ extern "C" {
     void getOutputWide(SimulationContext * ctx, uint64_t id, uint64_t val[]);
 }
 
-void eval(bool_cb cb) {
-    bool res = cb();
-    printf("Eval result: %d\n", res);
-}
-
-uint64_t tickUntil(SimulationContext * ctx, event_cb cb) {
-    uint64_t out_vals[NUM_OUTPUTS];
-
-    uint64_t ticks = 0;
-    
-    bool res = false;
-    do {
-        tick(ctx, 1);
-        ticks++;
-        for (int i = 0; i < NUM_OUTPUTS; i++) {
-            out_vals[i] = getOutput(ctx, i);
-        }
-        res = cb(out_vals);
-    } while (!res);
-
-    printf("Tick until ran %d cycles\n", ticks);
-
-    invocations++;
-
-    return ticks;
-}
 
 
 
 SimulationContext * createSimContext(const char* name, const char* wave_file, const char* time_resolution) {
-
     SimulationContext * ctx = new SimulationContext(name, wave_file, time_resolution);
-
-    invocations = 1;
-
     return ctx;
 }
 
 void destroySimContext(SimulationContext * ctx) {
-
-    printf("Native invocations: %lu\n", invocations);
-
     delete ctx;
-    
+}
+
+void tick(SimulationContext * ctx, uint32_t targetCycle) {
+    while (ctx->contextp->time() < targetCycle) {
+        ctx->GCD->eval();
+        ctx->tfp->dump(ctx->contextp->time());
+        ctx->contextp->timeInc(1);
+        ctx->tfp->flush();
+    }
 }
 
 
@@ -110,103 +74,28 @@ void setInput(SimulationContext * ctx, uint64_t id, uint64_t val) {
         case 2: ctx->GCD->req = val; break;
     }
     ctx->GCD->eval();
-    invocations++;
 }
 
 void setInputWide(SimulationContext * ctx, uint64_t id, uint64_t val[]) {
     switch(id) {
-        case 3: 
-            for (int i = 0; i < 4; i++) {
-                ctx->GCD->loadVal.data()[i] = val[i];
-            }
+        case 4: 
+            for (int i = 0; i < 4; i++) ctx->GCD->loadVal.data()[i] = val[i];
             break;
     }
 }
 
 uint64_t getOutput(SimulationContext * ctx, uint64_t id) {
     switch (id) {
-        case 4: return ctx->GCD->ack;
+        case 3: return ctx->GCD->ack;
     }
-    
-    invocations++;
 }
 
 void getOutputWide(SimulationContext * ctx, uint64_t id, uint64_t val[]) {
     switch(id) {
         case 5:
-            for (int i = 0; i < 4; i++) {
-                val[i] = ctx->GCD->result.data()[i];
-            }
+            for (int i = 0; i < 4; i++) val[i] = ctx->GCD->result.data()[i];
             break;
     }
 }
 
-void tick(SimulationContext * ctx, uint32_t targetCycle) {
-    while (ctx->contextp->time() < targetCycle) {
-        ctx->GCD->eval();
-        ctx->tfp->dump(ctx->contextp->time());
-        ctx->contextp->timeInc(1);
-        ctx->tfp->flush();
-    }
-    
-    invocations++;
-}
 
-
-
-/*
-
-
-
-void sim_tick() {
-    GCD->clock = 0;
-    GCD->eval();
-    tfp->dump(t);
-    contextp->timeInc(1);
-    GCD->clock = 1;
-    GCD->eval();
-    tfp->dump(t);
-    contextp->timeInc(1);
-
-    // TODO: we should use gcd->eventsPending() and gcd->nextTimeSlot() in the simulation loop
-}
-
-
-void set_tick_get(unsigned long in_ids[], unsigned long in_vals[], unsigned int in_size, unsigned long out_vals[], unsigned int ticks) {
-    for (int i = 0; i < in_size; i++) {
-        sim_set_input(in_ids[i], in_vals[i]);
-    }
-    sim_tick();
-
-    for (int i = 0; i < NUM_OUTPUTS; i++) {
-        out_vals[i] = sim_get_output(i);
-    }
-    invocations++;
-}
-
-long set_tick_get_until_equal(unsigned long in_ids[], unsigned long in_vals[], unsigned int in_size, unsigned long out_vals[], unsigned long port_id, unsigned long value) {
-    for (int i = 0; i < in_size; i++) {
-        sim_set_input(in_ids[i], in_vals[i]);
-    }
-
-    unsigned long current_value = sim_get_output(port_id);
-    long cycles;
-
-    cycles = 0;
-    do {
-        sim_tick();
-        cycles++;
-        printf("current time is: %ld\n", contextp->time());
-        current_value = sim_get_output(port_id);
-    } while (current_value != value);
-
-    for (int i = 0; i < NUM_OUTPUTS; i++) {
-        out_vals[i] = sim_get_output(i);
-    }
-    invocations++;
-
-    return cycles;
-}
-
-
-*/

@@ -1,6 +1,8 @@
 package framework
 
 
+import gears.async.*
+
 package object types {
 
   trait TypeContext {
@@ -25,34 +27,54 @@ package object types {
 
   trait Data extends Bits
 
+
+  class Clock extends Bits {
+    val width = 1.W
+  }
+
+  class Reset extends Bits {
+    val width = 1.W
+  }
+
+  
+
   extension [T <: Data](p: Port[T]) {
-    def peek: BigInt = {
-      Simulation.peek(p)
+    def peek[V](using PeekHandler[T, V], Sim, Async): V = {
+      summon[PeekHandler[T,V]].peek(p)
     }
   }
 
-  extension [T <: Data](p: Input[T]) {
-    def poke(value: BigInt): Unit = {
-      Simulation.poke(p, value)
+  extension [T <: Data](p: Output[T]) {
+    inline def expect[V](value: V)(using PeekHandler[T,V], Sim, Async): Unit = {
+      if p.peek != value then summon[Sim].logger.error("sim", s"Expected ${value.toString()}, got ${p.peek.toString()}")
     }
   }
 
-  extension (p: Input[Clock]) {
-    def step(steps: Int = 1): Unit = {
-      Simulation.step(p, steps)
+  extension [T <: Bits, V](p: Input[T]) {
+    def poke(value: V)(using PokeHandler[T, V], Sim, Async): Unit = {
+      summon[PokeHandler[T, V]].poke(p, value)
     }
-    def period = p.t.period
   }
 
-  extension (p: Input[Reset]) {
-    def assert(): Unit = {
-      Simulation.poke(p, 1)
+  extension (p: ClockPort) {
+    def step(steps: Int = 1)(using Sim, Async): Unit = {
+      summon[Sim].step(p, steps)
     }
-    def deassert(): Unit = {
-      Simulation.poke(p, 0)
+    def stepUntil(pred: => Boolean)(using Sim, Async): Unit = {
+      while !pred do
+        summon[Sim].step(p, 1)
     }
-    def peek: BigInt = {
-      Simulation.peek(p)
+  }
+
+  extension (p: ResetPort) {
+    def assert()(using Sim, Async): Unit = {
+      summon[Sim].poke(p, 1)
+    }
+    def deassert()(using Sim, Async): Unit = {
+      summon[Sim].poke(p, 0)
+    }
+    def peek(using Sim, Async): BigInt = {
+      summon[Sim].peek(p)
     }
   }
   

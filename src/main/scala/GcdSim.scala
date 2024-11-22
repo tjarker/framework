@@ -2,62 +2,66 @@ import com.sun.jna.Native
 
 import scala.collection.mutable
 
-import framework.*
-import framework.Time.*
-import framework.Module
-import framework.SimController
-import framework.types.*
-import framework.ClockDomain
+import gears.async.*
 
-import java.nio.file.Path
+import framework.*
+import framework.given
+import types.*
+import Time.*
+
+class GCD extends Module("gcd/GCD.sv") {
+
+  val clock = ClockPort(10.ns)
+  val reset = ResetPort()
+  val req = Input(Bool())
+  val ack = Output(Bool())
+  val loadVal = Input(UInt(128.W))
+  val result = Output(UInt(128.W))
+
+  domain(clock, reset)(
+    req, ack, loadVal, result
+  )
+}
 
 @main def GcdSim(): Unit = {
 
-  class Gcd extends Module("./gcd/build/gcd_model.so") {
 
-    val name = "GCD"
+  def transact(gcd: GCD, value: BigInt, expected: Option[BigInt])(using Sim, Async): BigInt = {
 
-    val clock = Input(Clock(10.ns))
-    val reset = Input(Reset())
-    val req = Input(Bool(), driveSkew = 4.ns)
-    val ack = Output(Bool())
-    val loadVal = Input(UInt(128.W), driveSkew = 3.ns)
-    val result = Output(UInt(128.W))
-
-    domains += ClockDomain(
-      clock,
-      Some(reset),
-      mutable.ArrayBuffer[Input[Bits]](req, loadVal),
-      mutable.ArrayBuffer[Output[Bits]](ack, result)
-    )
-  }
-
-
-
-
-  def transact(gcd: Gcd, value: BigInt): BigInt = {
     gcd.loadVal.poke(value)
-    gcd.req.poke(1)
+    gcd.req.poke(true)
 
-    while (gcd.ack.peek == 0) {
-      gcd.clock.step()
-    }
+
+    gcd.clock.stepUntil(gcd.ack.peek)
+
 
     val res = gcd.result.peek
-
-    gcd.req.poke(0)
-
-    while (gcd.ack.peek != 0) {
-      gcd.clock.step()
+    expected.foreach { e =>
+      gcd.result.expect(e)
     }
+
+    gcd.req.poke(false)
+
+
+    gcd.clock.stepUntil(!gcd.ack.peek)
+    
 
     res
   }
 
-  Simulation(Gcd(), 1.ns, debug = false) { gcd => 
+  def calc(gcd: GCD, nums: (BigInt, BigInt))(using Sim, Async): BigInt = {
+    transact(gcd, nums._1, None)
+    transact(gcd, nums._2, Some(model(nums)))
+  }
+
+  def model(nums: (BigInt, BigInt)): BigInt = {
+    nums._1.gcd(nums._2)
+  }
+
+  Simulation(GCD(), 1.ns) { gcd => 
   
     gcd.reset.assert()
-    gcd.req.poke(0)
+    gcd.req.poke(false)
     gcd.loadVal.poke(0)
 
     gcd.clock.step()
@@ -66,9 +70,12 @@ import java.nio.file.Path
 
     gcd.clock.step()
 
-    transact(gcd, BigInt("F123456789ABCDEF123456789ABCDEF1", 16))
+    //throw new Exception("Not implemented")
 
-    val res = transact(gcd, BigInt("123456789ABCDEF123456789ABCDEF12", 16))
+    val large = BigInt("6789ABCDEF1", 16) -> BigInt("56789ABCDEF12", 16)
+    val small = BigInt(12) -> BigInt(3)
+
+    val res = calc(gcd, small)
 
     println(s"Result: ${res}")
 
