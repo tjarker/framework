@@ -4,6 +4,7 @@ import scala.collection.mutable
 
 import types.*
 import Time.*
+import java.nio.file.Path
 
 object Module {
 
@@ -29,7 +30,7 @@ object Module {
   }
 }
 
-trait Module(val libPath: String) {
+trait Module(val files: String*) {
 
   import Module.*
 

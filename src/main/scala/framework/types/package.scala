@@ -36,21 +36,33 @@ package object types {
     val width = 1.W
   }
 
+  
+
   extension [T <: Data](p: Port[T]) {
-    def peek(using Sim, Async): BigInt = {
-      summon[Sim].peek(p)
+    def peek[V](using PeekHandler[T, V], Sim, Async): V = {
+      summon[PeekHandler[T,V]].peek(p)
     }
   }
 
-  extension [T <: Data](p: Input[T]) {
-    def poke(value: BigInt)(using Sim, Async): Unit = {
-      summon[Sim].poke(p, value)
+  extension [T <: Data](p: Output[T]) {
+    inline def expect[V](value: V)(using PeekHandler[T,V], Sim, Async): Unit = {
+      if p.peek != value then summon[Sim].logger.error("sim", s"Expected ${value.toString()}, got ${p.peek.toString()}")
+    }
+  }
+
+  extension [T <: Bits, V](p: Input[T]) {
+    def poke(value: V)(using PokeHandler[T, V], Sim, Async): Unit = {
+      summon[PokeHandler[T, V]].poke(p, value)
     }
   }
 
   extension (p: ClockPort) {
     def step(steps: Int = 1)(using Sim, Async): Unit = {
       summon[Sim].step(p, steps)
+    }
+    def stepUntil(pred: => Boolean)(using Sim, Async): Unit = {
+      while !pred do
+        summon[Sim].step(p, 1)
     }
   }
 

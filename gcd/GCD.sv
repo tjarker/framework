@@ -37,14 +37,20 @@ module GCD #(
             case (state)
                 wait_a: begin
                     a <= loadVal;
-                    if (req) state <= ack_a;
+                    if (req) begin
+                        $display("a = %d", loadVal);
+                        state <= ack_a;
+                    end
                 end
                 ack_a: begin
                     if (!req) state <= wait_b;
                 end
                 wait_b: begin
                     b <= loadVal;
-                    if (req) state <= compare;
+                    if (req) begin
+                        $display("b = %d", loadVal);
+                        state <= compare;
+                    end
                 end
                 compare: begin
                     if (a > b) state <= update_a;

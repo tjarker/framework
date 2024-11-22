@@ -1,12 +1,14 @@
 import framework.*
+import framework.given
 import types.*
 import Time.*
 
 import scala.collection.mutable
+import java.nio.file.Path
 
 @main def CdcSim(): Unit = {
 
-  class CDC extends Module("./cdc/build/libcdc.so") {
+  class CDC extends Module("cdc/CDC.sv") {
 
     val clk_l = ClockPort(6.ns)
     val clk_r = ClockPort(10.ns)
@@ -20,8 +22,8 @@ import scala.collection.mutable
     val ack_l = Output(Bool())
     val ack_r = Input(Bool())
 
-    val data_l = Input(UInt(16.W))
-    val data_r = Output(UInt(16.W))
+    val data_l = Input(UInt(128.W))
+    val data_r = Output(UInt(128.W))
 
     domain(clk_l, rst_l)(
       req_l, data_l, ack_l
@@ -34,15 +36,16 @@ import scala.collection.mutable
   }
 
   Simulation(CDC(), 1.ns) { cdc =>
+
+    val magicNum = BigInt("deadbeefdeadbeefdeadbeefdeadbeef", 16)
+
+
+    // TODO: when waiting for forks, we need to signal that the thread is sleeping to the scheduler
     
-    println(cdc.domains.mkString("\n"))
-
-    println(cdc.ports.mkString("\n"))
-
-    fork("left") {
+    fork {
 
       cdc.rst_l.assert()
-      cdc.req_l.poke(0)
+      cdc.req_l.poke(false)
       cdc.data_l.poke(0)
 
       cdc.clk_l.step()
@@ -51,26 +54,26 @@ import scala.collection.mutable
 
       cdc.clk_l.step()
 
-      cdc.req_l.poke(1)
-      cdc.data_l.poke(42)
+      cdc.req_l.poke(true)
+      cdc.data_l.poke(magicNum)
 
-      while (cdc.ack_l.peek == 0) {
-        cdc.clk_l.step()
-      }
 
-      cdc.req_l.poke(0)
+      cdc.clk_l.stepUntil(cdc.ack_l.peek)
+      
+
+      cdc.req_l.poke(false)
       cdc.data_l.poke(0)
 
-      while (cdc.ack_l.peek != 0) {
-        cdc.clk_l.step()
-      }
+
+      cdc.clk_l.stepUntil(!cdc.ack_l.peek)
+      
 
     }
-
-    fork("right") {
+    
+    fork {
 
       cdc.rst_r.assert()
-      cdc.ack_r.poke(0)
+      cdc.ack_r.poke(false)
 
       cdc.clk_r.step()
 
@@ -78,25 +81,26 @@ import scala.collection.mutable
 
       cdc.clk_r.step()
 
-      while (cdc.req_r.peek == 0) {
-        cdc.clk_r.step()
-      }
 
-      val res = cdc.data_r.peek
+      cdc.clk_r.stepUntil(cdc.req_r.peek)
+      
+
+      cdc.data_r.expect(magicNum)
 
       cdc.clk_r.step()
 
-      cdc.ack_r.poke(1)
+      cdc.ack_r.poke(true)
 
-      while (cdc.req_r.peek != 0) {
-        cdc.clk_r.step()
-      }
 
-      cdc.ack_r.poke(0)
+      cdc.clk_r.stepUntil(!cdc.req_r.peek)
+      
+
+      cdc.ack_r.poke(false)
 
     }
 
-    cdc.clk_r.step(40)
+    cdc.clk_r.step(10)
+
   }
 
 }

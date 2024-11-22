@@ -5,53 +5,63 @@ import scala.collection.mutable
 import gears.async.*
 
 import framework.*
+import framework.given
 import types.*
 import Time.*
 
-import java.nio.file.Path
+class GCD extends Module("gcd/GCD.sv") {
+
+  val clock = ClockPort(10.ns)
+  val reset = ResetPort()
+  val req = Input(Bool())
+  val ack = Output(Bool())
+  val loadVal = Input(UInt(128.W))
+  val result = Output(UInt(128.W))
+
+  domain(clock, reset)(
+    req, ack, loadVal, result
+  )
+}
 
 @main def GcdSim(): Unit = {
 
-  class GCD extends Module("./gcd/build/gcd_model.so") {
 
-    val clock = ClockPort(10.ns)
-    val reset = ResetPort()
-    val req = Input(Bool())
-    val ack = Output(Bool())
-    val loadVal = Input(UInt(128.W))
-    val result = Output(UInt(128.W))
+  def transact(gcd: GCD, value: BigInt, expected: Option[BigInt])(using Sim, Async): BigInt = {
 
-    domain(clock, reset)(
-      req, ack, loadVal, result
-    )
-  }
-
-
-
-
-  def transact(gcd: GCD, value: BigInt)(using Sim, Async): BigInt = {
     gcd.loadVal.poke(value)
-    gcd.req.poke(1)
+    gcd.req.poke(true)
 
-    while (gcd.ack.peek == 0) {
-      gcd.clock.step()
-    }
+
+    gcd.clock.stepUntil(gcd.ack.peek)
+
 
     val res = gcd.result.peek
-
-    gcd.req.poke(0)
-
-    while (gcd.ack.peek != 0) {
-      gcd.clock.step()
+    expected.foreach { e =>
+      gcd.result.expect(e)
     }
 
+    gcd.req.poke(false)
+
+
+    gcd.clock.stepUntil(!gcd.ack.peek)
+    
+
     res
+  }
+
+  def calc(gcd: GCD, nums: (BigInt, BigInt))(using Sim, Async): BigInt = {
+    transact(gcd, nums._1, None)
+    transact(gcd, nums._2, Some(model(nums)))
+  }
+
+  def model(nums: (BigInt, BigInt)): BigInt = {
+    nums._1.gcd(nums._2)
   }
 
   Simulation(GCD(), 1.ns) { gcd => 
   
     gcd.reset.assert()
-    gcd.req.poke(0)
+    gcd.req.poke(false)
     gcd.loadVal.poke(0)
 
     gcd.clock.step()
@@ -62,9 +72,10 @@ import java.nio.file.Path
 
     //throw new Exception("Not implemented")
 
-    transact(gcd, BigInt("F123456789ABCDEF123456789ABCDEF1", 16))
+    val large = BigInt("6789ABCDEF1", 16) -> BigInt("56789ABCDEF12", 16)
+    val small = BigInt(12) -> BigInt(3)
 
-    val res = transact(gcd, BigInt("123456789ABCDEF123456789ABCDEF12", 16))
+    val res = calc(gcd, small)
 
     println(s"Result: ${res}")
 
