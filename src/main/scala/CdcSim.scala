@@ -8,7 +8,7 @@ import java.nio.file.Path
 
 @main def CdcSim(): Unit = {
 
-  class CDC extends Module("cdc/CDC.sv") {
+  class CDC extends Module("src/hdl/sv/CDC.sv") {
 
     val clk_l = ClockPort(6.ns)
     val clk_r = ClockPort(10.ns)

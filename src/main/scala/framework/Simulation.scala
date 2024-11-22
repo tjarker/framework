@@ -51,7 +51,7 @@ object Simulation {
       sim.deregisterCurrentThread()
     }.await
     controller.cancel()
-    ctrl.logger.info("sim", "Simulation finished")
+    sim.logger.info("sim", "Simulation finished")
   }
 
   def fork[T](block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Spawn): Future[T] = {
