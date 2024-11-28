@@ -163,7 +163,7 @@ class SimulationController(
   HarnessGenerator.generate(dut, p)
   MakefileGenerator.generate(dut, p)
 
-  Process("make", p.toFile).!!
+  Process("make clean_copies all", p.toFile).!!
 
   val libPath = s"${p.toAbsolutePath}/build/lib${dut.name}.so"
   val libCopy = s"${p.toAbsolutePath}/build/lib${dut.name}_${java.time.Instant.now().toEpochMilli}.so"

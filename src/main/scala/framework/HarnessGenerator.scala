@@ -26,6 +26,9 @@ object MakefileGenerator {
        |
        |build/lib${m.name}.so: build/libV${m.name}.a build/sim.o build/libverilated.a build/V${m.name}__ALL.a
        |\tg++ -shared -o $$@ build/libV${m.name}.a build/sim.o build/libverilated.a build/V${m.name}__ALL.a  -pthread -lpthread -latomic
+       |
+       |clean_copies:
+       |\trm -rf build/lib${m.name}_*.so
        |""".stripMargin
 
 }

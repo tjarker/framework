@@ -41,3 +41,18 @@ class Logger(enable: Boolean) {
 }
 
 object Logger extends Logger(true)
+
+
+class ComponentLogger(name: String) {
+  val logger = Logger(true)
+  def info(msg: String): Unit = logger.info(name, msg)
+  def warning(msg: String): Unit = logger.warning(name, msg)
+  def error(msg: String): Unit = logger.error(name, msg)
+}
+
+
+trait Reportable {
+  inline def info(msg: String): Unit = Logger.info(this.toString(), msg)
+  inline def warning(msg: String): Unit = Logger.warning(this.toString(), msg)
+  inline def error(msg: String): Unit = Logger.error(this.toString(), msg)
+}
