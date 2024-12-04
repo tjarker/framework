@@ -79,6 +79,7 @@ class VerilatorInterface(
   )
 
   val inVals = collection.mutable.Map[Long, BigInt]()
+  m.inputs.foreach { case i => inVals(m.portToId(i)) = BigInt(0) }
 
   def tick(until: AbsoluteTime) = lib.tick(ctx, until.fs / timeUnit.fs)
 

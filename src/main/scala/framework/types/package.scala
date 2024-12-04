@@ -61,8 +61,9 @@ package object types {
       summon[Sim].step(p, steps)
     }
     def stepUntil(pred: => Boolean)(using Sim, Async): Unit = {
-      while !pred do
+      while (!pred) {
         summon[Sim].step(p, 1)
+      }
     }
   }
 

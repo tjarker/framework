@@ -33,8 +33,49 @@ trait Sim {
 
   def step(c: ClockPort, steps: Int)(using Async): Unit
 
+  def join(t: Thread)(using Async): Unit
+
+  def finish()(using Async): Unit
+
+  def abort(e: Throwable)(using Async): Unit
+
   def time: SimulationTime
 }
+
+case class ForkContext(c: Option[Component])
+
+class Fork[T](name: String, block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Spawn) {
+
+    val s = summon[Sim]
+    val a = summon[Async.Spawn]
+
+    val sim = new Simulation(s.ctrl, SyncChannel(), name)
+
+    var vThread = Option.empty[Thread]
+    
+    val future = Future {
+      vThread = Some(Thread.currentThread)
+      sim.registerCurrentThread()
+      val r = try {
+        block(using sim, a)
+      } catch {
+        case e: java.util.concurrent.CancellationException => 
+          sim.logger.info("sim", s"Thread $name cancelled")
+        case e: Throwable =>
+          sim.logger.error("sim", s"Thread $name failed: $e")
+          sim.abort(e)
+      }
+      sim.deregisterCurrentThread()
+      r
+    }
+
+    s.addChildThread(future)
+
+    def join(): Unit = {
+      s.join(vThread.get)
+    }
+
+  }
 
 object Simulation {
 
@@ -44,30 +85,29 @@ object Simulation {
     val ctrl = new SimulationController(SyncChannel(), m, timeUnit)
     val sim = new Simulation(ctrl, SyncChannel(), "root")
     given Sim = sim
+    given ForkContext = ForkContext(None)
     val controller = Future(ctrl.run())
     Future {
       sim.registerCurrentThread()
       block(m)
-      sim.deregisterCurrentThread()
-    }.await
-    controller.cancel()
-    sim.logger.info("sim", "Simulation finished")
+      sim.finish()
+    }
+    controller.awaitResult
+    sim.logger.success("sim", "Simulation finished")
   }
 
-  def fork[T](block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Spawn): Future[T] = {
+  
+
+  def fork[T](block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Spawn): Fork[T] = {
     val s = summon[Sim]
-    val a = summon[Async.Spawn]
     val name = s.hierarchicalThreadName + "." + s.getChildThreads.size
-    val sim = new Simulation(s.ctrl, SyncChannel(), name)
-    s.logger.warning("sim", s"forking thread $name from ${s.hierarchicalThreadName}")
-    val fut = Future {
-      sim.registerCurrentThread()
-      val r = block(using sim, a)
-      sim.deregisterCurrentThread()
-      r
-    }
-    s.addChildThread(fut)
-    fut
+    Fork(name, block)
+  }
+
+  def forkComp[T](c: Component, phase: String, block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Spawn): Fork[T] = {
+    val s = summon[Sim]
+    val name = s.hierarchicalThreadName + "." + s.getChildThreads.size + s"(${c.name}_$phase)"
+    Fork(name, block)
   }
 
 }
@@ -75,7 +115,7 @@ object Simulation {
 class Simulation(
     val ctrl: SimulationController,
     response: SyncChannel[SimulationController.Response],
-    val hierarchicalThreadName: String
+    val hierarchicalThreadName: String,
 ) extends Sim {
 
   import SimulationController.Command.*
@@ -103,10 +143,11 @@ class Simulation(
 
   def peek(p: Port[Bits])(using Async): BigInt = {
     ctrl.sendCommand(Peek(Thread.currentThread, p))
-    response.read() match {
+    val r = response.read() match {
       case Right(Peeked(value)) => value
       case _ => throw new RuntimeException("Unexpected response")
     }
+    r
   }
 
   def step(c: ClockPort, steps: Int)(using Async): Unit = {
@@ -115,6 +156,22 @@ class Simulation(
       case Right(Stepped) => return
       case _              => throw new RuntimeException("Unexpected response")
     }
+  }
+
+  def join(t: Thread)(using Async): Unit = {
+    ctrl.sendCommand(WaitForThread(Thread.currentThread, t))
+    response.read() match {
+      case Right(Joined) => return
+      case _              => throw new RuntimeException("Unexpected response")
+    }
+  }
+
+  def finish()(using Async): Unit = {
+    ctrl.sendCommand(Finish(Thread.currentThread))
+  }
+
+  def abort(e: Throwable)(using Async): Unit = {
+    ctrl.sendCommand(Abort(Thread.currentThread, e))
   }
 
   def time: SimulationTime = ctrl.time
@@ -131,11 +188,33 @@ object SimulationController {
     case Poke(t: Thread, p: Input[Bits], value: BigInt) extends Command(t)
     case Peek(t: Thread, p: Port[Bits]) extends Command(t)
     case Step(t: Thread, c: ClockPort, steps: Int) extends Command(t)
+
+    case MarkSleeping(t: Thread) extends Command(t)
+    case MarkRunning(t: Thread) extends Command(t)
+
+    case SendToChannel[T](t: Thread, ch: framework.Channel[T]) extends Command(t)
+    case WaitForChannel[T](t: Thread, ch: framework.Channel[T]) extends Command(t)
+
+    case WaitForThread(t: Thread, toBeJoined: Thread) extends Command(t)
+
+    case Finish(t: Thread) extends Command(t)
+
+    case Abort(t: Thread, e: Throwable) extends Command(t)
   }
 
   enum Response {
     case Peeked(value: BigInt)
     case Stepped
+    case Joined
+  }
+
+  enum ThreadStatus {
+    case Running
+    case WaitForStep
+    case BlockedSend
+    case BlockedRead
+    case SelfBlocked
+    case JoinBlocked(t: String)
   }
 
 }
@@ -187,10 +266,16 @@ class SimulationController(
 
   private val respond =
     collection.mutable.Map[Thread, SendableChannel[Response]]()
-  private val threadRunning = collection.mutable.Map[Thread, Boolean]()
+  private val threadStatus = collection.mutable.Map[Thread, ThreadStatus]()
   private val names = collection.mutable.Map[Thread, String]()
 
+  private val sends = collection.mutable.Map[framework.Channel[?], Thread]()
+  private val reads = collection.mutable.Map[framework.Channel[?], Thread]()
+  private val joins = collection.mutable.Map[Thread, collection.mutable.ListBuffer[Thread]]()
   private val queue = InteractionQueue()
+
+  private var finish = false
+  private var abort = Option.empty[(Thread, Throwable)]
 
   val logger = Logger(false)
 
@@ -221,33 +306,46 @@ class SimulationController(
   }
 
   def run()(using Async): Unit = {
-    logger.info("sim", "Waiting for command")
+    logger.info("ctrl", "Waiting for command")
     commands.read() match {
-      case Left(_) => logger.error("sim", "Unexpected command")
+      case Left(_) => logger.error("ctrl", "Unexpected command")
       case Right(c) =>
-        logger.info("sim", s"Handling command $c")
+        //logger.info("ctrl", s"Handling command $c")
         handleCommand(c)
     }
     while (true) {
 
-      logger.info("sim", "checking whether no more threads exist.")
-      if (threadRunning.isEmpty) {
-        logger.info("sim", "All threads deregistered, exiting")
+      if (finish) {
+        logger.info("ctrl", "Finishing")
         return
       }
 
-      logger.info("sim", "Checking whether all threads are sleeping")
-      if (threadRunning.forall(!_._2)) {
-        logger.info("sim", "All threads sleeping")
+      if (abort.isDefined) {
+        val (t, e) = abort.get
+        logger.error("ctrl", s"Aborting due to thread ${names(t)}: ${e}")
+        return
+      }
+
+      if (threadStatus.isEmpty) {
+        logger.info("ctrl", "All threads deregistered, exiting")
+        return
+      }
+
+      logger.info("ctrl", s"""Threads:
+                    |  - ${threadStatus.map((t, s) => s"${names(t)}($s) [$t]").mkString("\n  - ")} """.stripMargin)
+
+      
+      if (threadStatus.forall(_._2 != ThreadStatus.Running)) {
+        logger.info("ctrl", "All threads sleeping")
 
         val nextTime = queue.nextInteractionTime
 
-        logger.info("sim", s"Next interaction at time: $nextTime")
+        logger.info("ctrl", s"Next interaction at time: $nextTime")
 
         if (nextTime == time) {
-          logger.info("sim", "Already at correct time")
+          logger.info("ctrl", "Already at correct time")
         } else if (nextTime > time) {
-          logger.info("sim", s"Advancing time to $nextTime")
+          logger.info("ctrl", s"Advancing time to $nextTime")
           time.set(nextTime)
           model.tick(nextTime)
         } else throw new RuntimeException("Time went backwards")
@@ -255,21 +353,23 @@ class SimulationController(
         val interactions = queue.getInteractionsForThisTime
 
         logger.info(
-          "sim",
+          "ctrl",
           s"Handling interactions: \n  - ${interactions.mkString("  - ")}"
         )
 
         interactions.foreach { i =>
-          logger.info("sim", s"Handling interaction $i")
+          logger.info("ctrl", s"Handling interaction $i")
           handleInteraction(i)
         }
 
       } else {
-        logger.info("sim", "Waiting for command")
+        
+
+        logger.info("ctrl", "Waiting for command")
         commands.read() match {
-          case Left(_) => logger.error("sim", "Unexpected command")
+          case Left(_) => logger.error("ctrl", "Unexpected command")
           case Right(c) =>
-            logger.info("sim", s"Handling command $c")
+            logger.info("ctrl", s"Received command $c")
             handleCommand(c)
         }
 
@@ -281,7 +381,7 @@ class SimulationController(
     case Interaction.Drive(t, p, value) =>
       model.pokeInput(dut.portToId(p), value, p.width.toInt)
       uncommitedPortState(p) = false
-      logger.info("sim", s"Driven $p with ${value.toString(16)}")
+      logger.info("cmc", s"Driven $p with ${value.toString(16)}")
 
     case Interaction.PosEdge(t, c) =>
       model.pokeInput(dut.portToId(c), 1, 1)
@@ -297,30 +397,40 @@ class SimulationController(
       logger.info("sim", s"Negedge $c")
 
     case Interaction.Release(t, thread) =>
-      threadRunning(thread) = true
-      logger.info("sim", respond.values.mkString(" "))
+      threadStatus(thread) = ThreadStatus.Running
       respond(thread).send(Stepped)
       logger.info("sim", s"Released ${names(thread)}")
 
   private def handleCommand(c: Command)(using Async) = c match
     case RegisterThread(t, name, response) =>
-      threadRunning(t) = true
+      threadStatus(t) = ThreadStatus.Running
       respond(t) = response
       names(t) = name
-      logger.info("sim", s"Registered thread $t")
+      logger.info("cmd", s"Registered thread $name")
 
     case DeregisterThread(t) =>
-      threadRunning.remove(t)
+      logger.info("cmd", s"Deregistered thread ${names(t)}")
+
+      if (joins.keys.toSeq.contains(t)) {
+        logger.info("cmd", s"Thread ${names(t)} has threads waiting for it")
+        val waitingThreads = joins(t)
+        waitingThreads.foreach { wt =>
+          logger.info("cmd", s"Waking up thread ${names(wt)}")
+          respond(wt).send(Joined)
+          threadStatus(wt) = ThreadStatus.Running
+        }
+        joins.remove(t)
+      }
+      threadStatus.remove(t)
       respond.remove(t)
-      logger.info("sim", s"Deregistered thread $t")
+      
 
     case Poke(t, p, value) =>
       if (uncommitedPortState(p))
-        logger.warning("sim", s"Multiple drivers for $p")
-      logger.info("sim", s"Poking $p with $value")
+        logger.warning("cmd", s"Multiple drivers for $p")
+      logger.info("cmd", s"Thread ${names(t)} poking $p with $value")
       portState(p) = value
       uncommitedPortState(p) = true
-      logger.info("sim", "adding drive interaction")
       queue.add(
         Interaction.Drive(
           (nextNegEdge(dut.portToClockDomain(p)) + inputDriveSkew(p)).absolute,
@@ -328,19 +438,68 @@ class SimulationController(
           value
         )
       )
-      logger.info("sim", s"Poked $p with $value")
 
     case Peek(t, p) =>
       val v = p match
-        case Input(_)  => model.peekInput(dut.portToId(p))
+        case Input(_)  => 
+          model.peekInput(dut.portToId(p))
         case Output(_) => model.peekOutput(dut.portToId(p), p.width.toInt)
-      logger.info("sim", s"Peeked $p = $v")
+      logger.info("cmd", s"Thread ${names(t)} peeked $p = $v")
       respond(t).send(Peeked(v))
 
     case Step(t, c, steps) =>
       val wakeup = time + c.period * steps
       queue.add(Interaction.Release(wakeup.absolute, t))
-      threadRunning(t) = false
-      logger.info("sim", s"Stepped $c by $steps (wake up at $wakeup)")
+      threadStatus(t) = ThreadStatus.WaitForStep
+      logger.info("cmd", s"Thread ${names(t)} want to step $c by $steps (wake up at $wakeup)")
 
+    case MarkSleeping(t) =>
+      threadStatus(t) = ThreadStatus.SelfBlocked
+      logger.info("cmd", s"Marked thread ${names(t)} as sleeping")
+
+    case MarkRunning(t) =>
+      threadStatus(t) = ThreadStatus.Running
+      logger.info("cmd", s"Marked thread ${names(t)} as running")
+
+    case SendToChannel(t, ch) =>
+      logger.info("cmd", s"Thread ${names(t)} sent to channel")
+      if (reads.contains(ch)) {
+        logger.info("cmd", s"Channel has already someone waiting")
+        val r = reads(ch)
+        reads.remove(ch)
+        threadStatus(r) = ThreadStatus.Running
+      } else {
+        sends(ch) = t
+        threadStatus(t) = ThreadStatus.BlockedSend
+        logger.info("cmd", s"Channel has no one waiting. Marked thread ${names(t)} as sleeping")
+      }
+      
+    case WaitForChannel(t, ch) =>
+      logger.info("cmd", s"Thread ${names(t)} waiting for channel")
+      if (sends.contains(ch)) {
+        logger.info("cmd", s"Channel has already someone sending")
+        val s = sends(ch)
+        sends.remove(ch)
+        threadStatus(s) = ThreadStatus.Running
+      } else {
+        reads(ch) = t
+        threadStatus(t) = ThreadStatus.BlockedRead
+        logger.info("cmd", s"Channel has no one sending. Marked thread ${names(t)} as sleeping")
+      }
+      
+    case WaitForThread(t, toBeJoined) =>
+      logger.info("cmd", s"Thread ${names(t)} wants to wait for thread ${names(toBeJoined)}")
+
+      if (threadStatus.keys.toSeq.contains(toBeJoined)) {
+        logger.info("cmd", s"Thread ${names(toBeJoined)} still running. Marked thread ${names(t)} as sleeping")
+        threadStatus(t) = ThreadStatus.JoinBlocked(names(toBeJoined))
+        joins.getOrElseUpdate(toBeJoined, collection.mutable.ListBuffer()).addOne(t)
+      } else {
+        logger.info("cmd", s"Thread ${names(toBeJoined)} has already stopped. Continuing thread ${names(t)}")
+        respond(t).send(Joined)
+      }
+
+
+    case Finish(t) => finish = true
+    case Abort(t, e) => abort = Some(t -> e)
 }

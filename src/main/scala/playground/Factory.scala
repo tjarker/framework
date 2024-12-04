@@ -1,5 +1,7 @@
 package playground
 
+import framework.Component
+
 abstract class UVMComponent {
   def name: String
 
@@ -8,12 +10,10 @@ abstract class UVMComponent {
 class Factory[T <: UVMComponent] {
 
   object Type {
-    def create(name: String): T = ???//FactoryRegistration.createImpl[T](name)
+    def create(name: String): T = ??? // FactoryRegistration.createImpl[T](name)
   }
 
-  
 }
-
 
 import scala.reflect.ClassTag
 import scala.collection.mutable
@@ -21,7 +21,6 @@ import scala.collection.mutable
 object UVMFactory {
 
   private val tagMapping = mutable.Map[ClassTag[?], ClassTag[?]]()
-
 
   // Register a component type
   def register[T <: UVMComponent: ClassTag]: Unit = {
@@ -59,8 +58,8 @@ class Monitor(val name: String) extends UVMComponent {
 @main def testFactory(): Unit = {
 
 // Register components in the factory by type
-  //UVMFactory.register[Driver]
-  //UVMFactory.register[Monitor]
+  // UVMFactory.register[Driver]
+  // UVMFactory.register[Monitor]
 
 // Create components using the factory by type
   val driver = UVMFactory.create[Driver]("driver1")
@@ -75,10 +74,83 @@ class Monitor(val name: String) extends UVMComponent {
 
 // Create the overridden driver and test it
   val customDriver = UVMFactory.create[Driver]("driver2")
-  
 
   driver.drive()
   monitor.monitor()
   customDriver.drive()
 
+}
+
+trait Comp {
+  var name: String = ""
+}
+
+trait ComponentFactory[A, T <: Comp] {
+
+  def construct(c: A): T
+
+  var constructor = this.construct
+
+  def create(name: String, arg: A): T = {
+    val c = constructor(arg)
+    c.name = name
+    c
+  }
+
+  inline def create(arg: A): T =
+    create(framework.macros.Naming.enclosingTermName, arg)
+
+  def overrideFactory[B, T2 <: T](
+      f: ComponentFactory[B, T2],
+      c: A => B
+  ): Unit = {
+    constructor = (a: A) => f.constructor(c(a))
+  }
+
+  def overrideFactory[T2 <: T](f: ComponentFactory[A, T2]): Unit = {
+    constructor = f.constructor
+  }
+
+}
+
+class MyThing(msg: String) extends Comp {
+  def hello(): Unit = println(s"Hello $name, $msg!")
+}
+
+object MyThing extends ComponentFactory[String, MyThing] {
+  def construct(c: String): MyThing = new MyThing(c)
+}
+
+class CustomThing(n: String, num: Int) extends MyThing(n) {
+  override def hello(): Unit = println(s"Custom hello $name, $n! $num")
+}
+
+object CustomThing extends ComponentFactory[(String, Int), CustomThing] {
+  def construct(c: (String, Int)): CustomThing = new CustomThing(c._1, c._2)
+}
+
+class OtherThing(msg: String) extends MyThing(msg) {
+  override def hello(): Unit = println(s"Other hello $name, $msg!")
+}
+
+object OtherThing extends ComponentFactory[String, OtherThing] {
+  def construct(c: String): OtherThing = new OtherThing(c)
+}
+
+@main def testFactoryy(): Unit = {
+  val thing = MyThing.create("i am the original")
+  thing.hello()
+
+  MyThing.overrideFactory(CustomThing, s => (s, 42))
+
+  val customThing = MyThing.create("i have a different constructor")
+  customThing.hello()
+
+  MyThing.overrideFactory(OtherThing)
+
+  val customThing2 = CustomThing.create("i have a different constructor" -> 128)
+  customThing2.hello()
+
+  val otherThing = MyThing.create("customName", "i have the same constructor as the original")
+  otherThing.hello()
 }

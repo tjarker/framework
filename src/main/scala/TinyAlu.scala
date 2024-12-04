@@ -1,8 +1,7 @@
-
+import framework.given
 import framework.*
 import types.*
 import Time.*
-import framework.given
 
 import gears.async.Async
 import scala.util.boundary
@@ -27,7 +26,12 @@ class TinyAlu extends Module("src/hdl/sv/tinyalu.sv") {
   val result = Output(UInt(8.W))
 
   domain(clk, reset_n)(
-    start, a, b, op, done, result
+    start,
+    a,
+    b,
+    op,
+    done,
+    result
   )
 }
 
@@ -38,6 +42,16 @@ object TinyAlu {
     case And extends Op(2)
     case Xor extends Op(3)
     case Mul extends Op(4)
+
+  }
+
+  object Op {
+    def fromInt(i: Int): Op = i match {
+      case 1 => Add
+      case 2 => And
+      case 3 => Xor
+      case 4 => Mul
+    }
   }
 
   object AluRequest {
@@ -61,14 +75,16 @@ object TinyAlu {
 
   def prediction(t: AluRequest): AluTransaction = {
     import t.{a, b, op}
-    AluTransaction(t, op match {
-      case Op.Add => a + b
-      case Op.And => a & b
-      case Op.Xor => a ^ b
-      case Op.Mul => a * b
-    })
+    AluTransaction(
+      t,
+      op match {
+        case Op.Add => a + b
+        case Op.And => a & b
+        case Op.Xor => a ^ b
+        case Op.Mul => a * b
+      }
+    )
   }
-
 
 }
 
@@ -82,7 +98,7 @@ class TinyAluBfm(dut: TinyAlu) {
     dut.clk.step()
   }
 
-  def sendRequest(t: AluRequest)(using Sim, Async.Spawn): Unit = fork {
+  def sendRequest(t: AluRequest)(using Sim, Async.Spawn): Unit = {
     import t.{a, b, op}
     dut.a.poke(a)
     dut.b.poke(b)
@@ -115,8 +131,6 @@ class TinyAluBfm(dut: TinyAlu) {
   for {
     t <- Seq.fill(4)(AluRequest.randomize())
   } {
-    val a = BigInt(8, scala.util.Random)
-    val b = BigInt(8, scala.util.Random)
     val prediction = TinyAlu.prediction(t)
     bfm.sendRequest(t)
     dut.clk.stepUntil(dut.done.peek)
@@ -127,42 +141,47 @@ class TinyAluBfm(dut: TinyAlu) {
 
 }
 
+class AluDriver(dut: TinyAlu) extends Component, SimulationPhase {
 
-
-
-class AluDriver(dut: TinyAlu) extends Component, RunPhase {
-
-  val tx = SyncChannel[AluRequest]()
+  val tx = Channel[AluRequest]()
   val bfm = TinyAluBfm(dut)
   def run()(using Sim, Async.Spawn) = {
+
     while (true) {
-      tx.read() match {
-        case Right(t) => 
-          info(s"Sending request: $t")
-          bfm.sendRequest(t)
-        case _ => 
-      }
+      val t = tx.read().unwrap
+      info(s"Sending request: $t")
+      bfm.sendRequest(t)
+      info(s"Waiting for done")
       bfm.waitForDone()
     }
-  }
 
+  }
 }
 
-class AluMonitor(dut: TinyAlu) extends Component, RunPhase {
+class AluMonitor(dut: TinyAlu) extends Component, SimulationPhase {
 
-  val ap = SyncChannel[AluTransaction]()
+  val ap = Channel[AluTransaction]()
   val bfm = TinyAluBfm(dut)
 
   def run()(using Sim, Async.Spawn) = {
+
     while (true) {
-      bfm.waitForStart()
-      val t = AluRequest(TinyAlu.Op.fromOrdinal(dut.op.peek.toInt), dut.a.peek, dut.b.peek)
+      info(s"Waiting for start")
+      dut.clk.stepUntil(dut.start.peek)
+      info(s"Start detected")
+      val t = AluRequest(
+        TinyAlu.Op.fromInt(dut.op.peek.toInt),
+        dut.a.peek,
+        dut.b.peek
+      )
       bfm.waitForDone()
       val res = dut.result.peek
-      val tx =AluTransaction(t, res)
+      val tx = AluTransaction(t, res)
       info(s"Observed transaction: $tx")
       ap.send(tx)
+      dut.clk.step()
     }
+
   }
 }
 
@@ -176,18 +195,32 @@ class AluAgent(dut: TinyAlu) extends Component {
 
 }
 
-class AluScoreboard(ap: SyncChannel[AluTransaction]) extends Component, RunPhase {
+class AluScoreboard(ap: Channel[AluTransaction])
+    extends Component,
+      SimulationPhase,
+      ReportPhase {
+
+  val txs = collection.mutable.ListBuffer[AluTransaction]()
 
   def run()(using Sim, Async.Spawn) = {
     while (true) {
-      val tx = ap.read().right.get
+      val tx = ap.read().unwrap
+      txs += tx
       val pred = TinyAlu.prediction(tx.req)
       if (tx.result == pred.result) {
         info(s"Transaction $tx passed")
       } else {
-        error(s"Transaction $tx failed. Expected ${pred.result}, got ${tx.result}")
+        error(
+          s"Transaction $tx failed. Expected ${pred.result}, got ${tx.result}"
+        )
       }
     }
+
+  }
+
+  def report() = {
+    info(s"Scoreboard received ${txs.size} transactions")
+    info(s" - ${txs.mkString("\n - ")}")
   }
 
 }
@@ -202,25 +235,36 @@ class AluEnv(dut: TinyAlu) extends Component {
 
 }
 
-class AluTest(dut: TinyAlu) extends Component, RunPhase {
+class AluTest(dut: TinyAlu) extends Component, ResetPhase, TestPhase {
 
   val env = new AluEnv(dut)
 
-  def run()(using Sim, Async.Spawn) = {
+  def reset()(using Sim, Async.Spawn) = {
+    env.agent.driver.bfm.reset()
+  }
+
+  def test()(using Sim, Async.Spawn) = {
+
+    util.Random.setSeed(42)
+
     val txs = Seq.fill(4)(AluRequest.randomize())
 
     txs.foreach(env.drv.send(_))
+
+    dut.clk.step(10)
   }
 }
 
-
 @main def TinyAluUvm(): Unit = Simulation(TinyAlu(), 1.ps) { dut =>
 
-  val env = Component.root(new AluEnv(dut))
+  val test = Component.root(new AluTest(dut))
 
-  Phase.run(env).await
+  Phase.run(test)
 
+  Phase.reset(test)
 
-  Phase.report(env)
+  Phase.test(test)
+
+  Phase.report(test)
 
 }
