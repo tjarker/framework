@@ -1,7 +1,15 @@
 
-# Run GCD example
+# Requirements
+
+- JDK >= 19
+- Verilator >= 5.002
+
+
+# Running Examples
 
 ```sh
-make -C gcd
-sbt "runMain GcdSim"
+sbt "runMain GcdSim" # a showcase of a simple testbench
+sbt "runMain CdcSim" # a showcase of a testbench with multiple clocks
+sbt "runMain TinyAluTest" # a showcase of a simple testbench with a model
+sbt "runMain TinyAluUvm" # a UVM showcase
 ```

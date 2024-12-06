@@ -4,4 +4,5 @@
   CdcSim()
   GcdSim()
   TinyAluTest()
+  TinyAluUvm()
 }

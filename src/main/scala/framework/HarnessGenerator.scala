@@ -22,7 +22,7 @@ object MakefileGenerator {
        |all: build/lib${m.name}.so
        |
        |build/libV${m.name}.a build/sim.o build/libverilated.a build/V${m.name}__ALL.a: ${m.files.map(Path.of(_).toAbsolutePath()).mkString(" ")} sim.cpp
-       |\tverilator --cc --trace --timing --build --Mdir build --top ${m.name} -CFLAGS "-fPIC -fpermissive" ${m.files.map(Path.of(_).toAbsolutePath()).mkString(" ")} sim.cpp
+       |\tverilator --cc -j $$(shell nproc) --trace --build --Mdir build --top ${m.name} -CFLAGS "-fPIC -fpermissive" ${m.files.map(Path.of(_).toAbsolutePath()).mkString(" ")} sim.cpp
        |
        |build/lib${m.name}.so: build/libV${m.name}.a build/sim.o build/libverilated.a build/V${m.name}__ALL.a
        |\tg++ -shared -o $$@ build/libV${m.name}.a build/sim.o build/libverilated.a build/V${m.name}__ALL.a  -pthread -lpthread -latomic

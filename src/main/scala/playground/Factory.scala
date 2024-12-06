@@ -154,3 +154,31 @@ object OtherThing extends ComponentFactory[String, OtherThing] {
   val otherThing = MyThing.create("customName", "i have the same constructor as the original")
   otherThing.hello()
 }
+
+//=========================================================
+
+inline def create[T <: Comp, A <: Tuple](arg: A)(using FactoryProvider[A,T]): T = 
+  summon[FactoryProvider[A,T]].create(arg)
+
+trait FactoryProvider[A <: Tuple, T <: Comp] {
+  def createInst(arg: A): T
+
+  inline def create(arg: A): T = {
+    val inst = createInst(arg)
+    inst.name = framework.macros.Naming.enclosingTermName
+    inst
+  }
+}
+
+
+
+@main def testGivenFactory(): Unit = {
+
+  given FactoryProvider[(String, Int), CustomThing] with {
+    def createInst(c: (String, Int)) = CustomThing.create(c)
+  }
+
+  val customThing = create("i have a different constructor" -> 128)
+  customThing.hello()
+
+}
