@@ -20,7 +20,7 @@ object VerilatorInterface {
     def tick(ctx: Pointer, targetCycle: Long): Unit
   }
 
-  class ModelInterface(m: Module, so: NativeLibrary) {
+  class ModelInterface(m: ModuleInterface, so: NativeLibrary) {
 
     val createSimContextHandle = so.getFunction(s"createSimContext_${m.name}")
     val destroySimContextHandle = so.getFunction(s"destroySimContext_${m.name}")
@@ -61,7 +61,7 @@ object VerilatorInterface {
 
 class VerilatorInterface(
     so: NativeLibrary,
-    m: Module,
+    m: ModuleInterface,
     waveFile: String, 
     timeUnit: Time
 ) {

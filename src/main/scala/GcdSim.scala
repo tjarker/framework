@@ -9,7 +9,7 @@ import framework.given
 import types.*
 import Time.*
 
-class GCD extends Module("src/hdl/sv/GCD.sv") {
+class GCD extends ModuleInterface("src/hdl/sv/GCD.sv") {
 
   val clock = ClockPort(10.ns)
   val reset = ResetPort()

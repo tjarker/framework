@@ -9,7 +9,7 @@ import TinyAlu.AluRequest
 import gears.async.SyncChannel
 import TinyAlu.AluTransaction
 
-class TinyAlu extends Module("src/hdl/sv/tinyalu.sv") {
+class TinyAlu extends ModuleInterface("src/hdl/sv/tinyalu.sv") {
 
   override val name = "tinyalu"
 

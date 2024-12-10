@@ -6,7 +6,7 @@ import types.*
 import Time.*
 import java.nio.file.Path
 
-object Module {
+object ModuleInterface {
 
   case class ModuleBuilderContext(ports: mutable.ArrayBuffer[Port[Bits]]) {
     def register[T <: Port[Bits]](port: T): T = {
@@ -30,9 +30,9 @@ object Module {
   }
 }
 
-trait Module(val files: String*) {
+trait ModuleInterface(val files: String*) {
 
-  import Module.*
+  import ModuleInterface.*
 
   val ctx = ModuleBuilderContext(mutable.ArrayBuffer())
   given ModuleBuilderContext = ctx

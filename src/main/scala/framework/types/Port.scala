@@ -2,7 +2,7 @@ package framework.types
 
 import framework.macros.Naming
 import framework.Time
-import framework.Module.ModuleBuilderContext
+import framework.ModuleInterface.ModuleBuilderContext
 
 trait Port[+T <: Bits] {
   def width: Width

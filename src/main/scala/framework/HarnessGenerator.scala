@@ -7,7 +7,7 @@ import java.nio.file.StandardOpenOption
 
 object MakefileGenerator {
 
-  def generate(m: Module, p: Path) = {
+  def generate(m: ModuleInterface, p: Path) = {
     Files.createDirectories(p)
     Files.write(
       p.resolve("Makefile"), 
@@ -17,7 +17,7 @@ object MakefileGenerator {
     )
   }
 
-  def makefile(m: Module) = 
+  def makefile(m: ModuleInterface) = 
     s"""
        |all: build/lib${m.name}.so
        |
@@ -35,7 +35,7 @@ object MakefileGenerator {
 
 object HarnessGenerator {
 
-  def generate(m: Module, p: Path) = {
+  def generate(m: ModuleInterface, p: Path) = {
     Files.createDirectories(p)
     Files.write(
       p.resolve("sim.cpp"), 
@@ -46,7 +46,7 @@ object HarnessGenerator {
   }
 
 
-  def harness(m: Module): String = {
+  def harness(m: ModuleInterface): String = {
     val name = m.name
     s"""
       |${includes(name)}
@@ -141,7 +141,7 @@ object HarnessGenerator {
        |  }
        |}""".stripMargin
 
-  def setInput(m: Module) = {
+  def setInput(m: ModuleInterface) = {
     val narrowInputs = m.inputs
       .filter(_.width.toInt <= 64)
       .map(i => i -> m.portToId(i))
@@ -157,7 +157,7 @@ object HarnessGenerator {
        |}""".stripMargin
   }
 
-  def setInputWide(m: Module) = {
+  def setInputWide(m: ModuleInterface) = {
     val wideInputs = m.inputs
       .filter(_.width.toInt > 64)
       .map(i => i -> m.portToId(i))
@@ -174,7 +174,7 @@ object HarnessGenerator {
        |}""".stripMargin
   }
 
-  def getOutput(m: Module) = {
+  def getOutput(m: ModuleInterface) = {
     val narrowOutputs = m.outputs
       .filter(_.width.toInt <= 64)
       .map(o => o -> m.portToId(o))
@@ -190,7 +190,7 @@ object HarnessGenerator {
        |}""".stripMargin
   }
 
-  def getOutputWide(m: Module) = {
+  def getOutputWide(m: ModuleInterface) = {
     val wideOutputs = m.outputs
       .filter(_.width.toInt > 64)
       .map(o => o -> m.portToId(o))

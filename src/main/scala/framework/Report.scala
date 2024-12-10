@@ -15,6 +15,16 @@ object Logger {
       Console.println(s"[info] [${YELLOW}$provider${RESET}] ${line}")
     }
   }
+  inline def info(msg: String): Unit = Logger.synchronized {
+    val lines = msg.split("\n")
+    Console.println(
+      s"[info] ${lines.head}"
+    )
+    lines.tail.foreach { line =>
+      Console.println(s"[info] ${line}")
+    }
+  }
+
   inline def warning(provider: String, msg: String): Unit = Logger.synchronized {
     val lines = msg.split("\n")
     Console.err.println(
@@ -23,6 +33,18 @@ object Logger {
     lines.tail.foreach { line =>
       Console.err.println(
         s"[${YELLOW}warn${RESET}] [${YELLOW}$provider${RESET}] ${line}"
+      )
+    }
+  }
+
+  inline def warning(msg: String): Unit = Logger.synchronized {
+    val lines = msg.split("\n")
+    Console.err.println(
+      s"[${YELLOW}warn${RESET}] ${lines.head}"
+    )
+    lines.tail.foreach { line =>
+      Console.err.println(
+        s"[${YELLOW}warn${RESET}] ${line}"
       )
     }
   }
@@ -37,6 +59,17 @@ object Logger {
       )
     }
   }
+  inline def error(msg: String): Unit = Logger.synchronized {
+    val lines = msg.split("\n")
+    Console.err.println(
+      s"[${RED}error${RESET}] ${lines.head}"
+    )
+    lines.tail.foreach { line =>
+      Console.err.println(
+        s"[${RED}error${RESET}] ${line}"
+      )
+    }
+  }
 
   inline def success(provider: String, msg: String): Unit = Logger.synchronized {
     val lines = msg.split("\n")
@@ -46,6 +79,17 @@ object Logger {
     lines.tail.foreach { line =>
       Console.println(
         s"[${GREEN}success${RESET}] [${YELLOW}$provider${RESET}] ${line}"
+      )
+    }
+  }
+  inline def success(msg: String): Unit = Logger.synchronized {
+    val lines = msg.split("\n")
+    Console.println(
+      s"[${GREEN}success${RESET}] ${lines.head}"
+    )
+    lines.tail.foreach { line =>
+      Console.println(
+        s"[${GREEN}success${RESET}] ${line}"
       )
     }
   }

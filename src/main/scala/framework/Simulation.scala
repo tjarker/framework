@@ -7,7 +7,7 @@ import gears.async.default.given
 
 import types.*
 import Time.*
-import Module.ClockDomain
+import ModuleInterface.ClockDomain
 
 import scala.collection.mutable
 
@@ -60,7 +60,7 @@ class Fork[T](name: String, block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Sp
         block(using sim, a)
       } catch {
         case e: java.util.concurrent.CancellationException => 
-          sim.logger.info("sim", s"Thread $name cancelled")
+          //sim.logger.info("sim", s"Thread $name cancelled")
         case e: Throwable =>
           sim.logger.error("sim", s"Thread $name failed: $e")
           sim.abort(e)
@@ -79,7 +79,7 @@ class Fork[T](name: String, block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Sp
 
 object Simulation {
 
-  def apply[M <: Module](m: M, timeUnit: Time)(
+  def apply[M <: ModuleInterface](m: M, timeUnit: Time)(
       block: (Sim, Async.Spawn) ?=> M => Unit
   ): Unit = Async.blocking {
     val ctrl = new SimulationController(SyncChannel(), m, timeUnit)
@@ -93,7 +93,7 @@ object Simulation {
       sim.finish()
     }
     controller.awaitResult
-    sim.logger.success("sim", "Simulation finished")
+    Logger.success(s"Simulation of ${m.name} finished")
   }
 
   
@@ -221,7 +221,7 @@ object SimulationController {
 
 class SimulationController(
     commands: SyncChannel[SimulationController.Command],
-    dut: Module,
+    dut: ModuleInterface,
     timeUnit: Time
 ) {
 

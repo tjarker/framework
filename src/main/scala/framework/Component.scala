@@ -22,7 +22,7 @@ object Phase {
 
     val fs = mutable.ListBuffer[(Component, Fork[?])]()
     inner(c, fs)
-    Logger.info("sim", "Started run phase for components:\n - " + fs.map(_._1.toString()).mkString("\n - "))
+    //Logger.info("sim", "Started run phase for components:\n - " + fs.map(_._1.toString()).mkString("\n - "))
   }
 
   def test(c: Component)(using Sim, Async.Spawn): Unit = {
@@ -34,7 +34,7 @@ object Phase {
     }
     val fs = mutable.ListBuffer[(Component, Fork[?])]()
     inner(c, fs)
-    Logger.info("sim", "Started test phase for components:\n - " + fs.map(_._1.toString()).mkString("\n - "))
+    //Logger.info("sim", "Started test phase for components:\n - " + fs.map(_._1.toString()).mkString("\n - "))
     fs.foreach(_._2.join())
   }
 
@@ -54,7 +54,7 @@ object Phase {
     }
     val fs = mutable.ListBuffer[(Component, Fork[?])]()
     inner(c, fs)
-    Logger.info("sim", "Started reset phase for components:\n - " + fs.map(_._1.toString()).mkString("\n - "))
+    //Logger.info("sim", "Started reset phase for components:\n - " + fs.map(_._1.toString()).mkString("\n - "))
     fs.foreach(_._2.join())
   }
   
@@ -80,7 +80,7 @@ object Component {
     c.hierarchy = Hierarchy(null, mutable.ListBuffer())
     c.name = "testRoot"
     c.initComponentHierarchy()
-    Logger.info("sim", "done initializing component hierarchy")
+    //Logger.info("sim", "done initializing component hierarchy")
     c
   }
 }
