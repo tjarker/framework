@@ -30,6 +30,7 @@ object VerilatorInterface {
     val getOutputWideHandle = so.getFunction(s"getOutputWide_${m.name}")
     val tickHandle = so.getFunction(s"tick_${m.name}")
     val quackHandle = so.getFunction(s"quack_${m.name}")
+    val getRegHandle = so.getFunction(s"getRegister_${m.name}")
 
     def createInstance(name: String, waveFile: String, timeResolution: String): Pointer = {
       createSimContextHandle.invokePointer(Array(name, waveFile, timeResolution))
@@ -54,6 +55,9 @@ object VerilatorInterface {
     }
     def quack(): Unit = {
       quackHandle.invoke(Array())
+    }
+    def getRegister(ctx: Pointer, id: Long, value: Array[Int]): Unit = {
+      getRegHandle.invoke(Array(ctx, id, value))
     }
 
   }
@@ -109,7 +113,7 @@ class VerilatorInterface(
 
   private def getOutput(id: Long, width: Int): BigInt = {
     if (width > 64) {
-      val arr = new Array[Int](width)
+      val arr = Array.fill(width)(0)
       lib.getOutputWide(ctx, id, arr)
       val r = arr.toBigInt
       log.info("verilator", s"Getting wide output $id as $r")
@@ -131,5 +135,11 @@ class VerilatorInterface(
   def peekOutput(id: Long, width: Int): BigInt = getOutput(id, width)
 
   def destroy() = lib.destroyInstance(ctx)
+
+  def peekRegister(id: Long, width: Int): BigInt = {
+    val arr = Array.fill(width)(0)
+    lib.getRegister(ctx, id, arr)
+    arr.toBigInt
+  }
 
 }

@@ -63,11 +63,14 @@ object HarnessGenerator {
       |
       |${getOutput(m)}
       |${getOutputWide(m)}
+      |
+      |${getRegister(m)}
     """.stripMargin
   }
 
   def includes(name: String) = 
     s"""#include "V$name.h"
+       |#include "V${name}___024root.h"
        |#include "verilated.h"
        |#include "verilated_vcd_c.h"
        |#include "stdint.h"""".stripMargin
@@ -114,6 +117,8 @@ object HarnessGenerator {
        |
        |  void setInputWide_$name(SimulationContext_$name * ctx, uint64_t id, uint32_t val[]);
        |  void getOutputWide_$name(SimulationContext_$name * ctx, uint64_t id, uint32_t val[]);
+       |
+       |  void getRegister_$name(SimulationContext_$name * ctx, uint64_t id, uint32_t val[]);
        |
        |  void quack_$name();
        |}""".stripMargin
@@ -207,5 +212,31 @@ object HarnessGenerator {
        |}""".stripMargin
   }
 
+  def regPathToVerilatorName(moduleName: String, p: String): String = {
+    s"${moduleName}__DOT__${p.split("\\.").mkString("__DOT__")}"
+  }
+
+  def getRegister(m: ModuleInterface) = {
+    val regMap = m.regs.map { r =>
+      val path = regPathToVerilatorName(m.name, r.path)
+      val words = math.ceil(r.w.toInt / 32.0).toInt
+      if (words > 2) {
+        s"""case ${m.regToId(r)}: for (int i = 0; i < $words; i++) val[i] = ctx->model->rootp->$path.data()[i]; break;"""
+      } else {
+        s"""case ${m.regToId(r)}: *((uint64_t *) val) = ctx->model->rootp->$path; break;"""
+      }
+    }
+    val prints = m.regs.map { r =>
+      val path = regPathToVerilatorName(m.name, r.path)
+      s"""printf("Register ${r.path} = %d\\n", ctx->model->rootp->$path);"""
+    }
+    s"""void getRegister_${m.name}(SimulationContext_${m.name} * ctx, uint64_t id, uint32_t val[]) {
+       |  
+       |  switch(id) {
+       |    ${regMap.mkString("\n    ")}
+       |    default: break;
+       |  }
+       |}""".stripMargin
+  }
 
 }

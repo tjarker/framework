@@ -56,6 +56,14 @@ package object types {
     }
   }
 
+  extension (p: Port[Bool]) {
+        def stepUntilRising(using Sim, Async): Unit = {
+            while (!p.peek[Boolean]) {
+              summon[Sim].ctrl.dut.portToClockDomain(p).clock.step()
+            }
+        }
+    }
+
   extension (p: ClockPort) {
     def step(steps: Int = 1)(using Sim, Async): Unit = {
       summon[Sim].step(p, steps)

@@ -1,0 +1,74 @@
+package apb
+
+import framework.*
+import gears.async.Async.Spawn
+import gears.async.Async
+import framework.types.*
+import framework.types.stepUntil
+
+abstract class ApbBaseDriver(bfm: ApbBfm) extends Driver[ApbTransaction] {
+
+  var driverLoopHandle: Option[Fork[?]] = None
+
+  override def run()(using Sim, Spawn): Unit = {
+
+    driverLoop()
+
+  }
+
+  def drivePins(tx: ApbTransaction)(using Sim, Async): Unit
+
+
+  def driverLoop()(using Sim, Async): Unit = while(true) {
+
+    info("Waiting for next transaction")
+
+    val tx = next()
+
+    info(s"Got transaction $tx")
+
+    info("Driving pins")
+    drivePins(tx)
+
+
+
+  }
+
+}
+
+class ApbProducerDriver(bfm: ApbBfm) extends ApbBaseDriver(bfm) {
+
+  override def drivePins(tx: ApbTransaction)(using Sim, Async): Unit = {
+
+    info("Driving pins for producer")
+
+
+    tx.op match {
+      case OpType.Write => {
+        bfm.addr.poke(tx.addr)
+        bfm.en.poke(false)
+        bfm.sel.poke(true)
+        bfm.wdata.poke(tx.data)
+        bfm.wr.poke(true)
+      }
+      case OpType.Read => {
+        bfm.addr.poke(tx.addr)
+        bfm.en.poke(false)
+        bfm.sel.poke(true)
+        bfm.wr.poke(false)
+      }
+    }
+
+    bfm.clk.step()
+    bfm.en.poke(true)
+
+    bfm.clk.stepUntil(bfm.ready.peek)
+
+    val err = bfm.slverr.peek
+    val rdata = bfm.rdata.peek
+
+    info(s"Got response: $rdata, error: $err")
+
+  }
+
+}

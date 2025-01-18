@@ -15,6 +15,8 @@ object ModuleInterface {
     }
   }
 
+  case class Register(w: Width, path: String)
+
   case class ClockDomain(
       clock: ClockPort,
       ports: Seq[Port[Bits]]
@@ -28,6 +30,8 @@ object ModuleInterface {
       s"ClockDomain(${clock}, ${ports.mkString("[", ", ", "]")})"
     }
   }
+
+
 }
 
 trait ModuleInterface(val files: String*) {
@@ -79,6 +83,16 @@ trait ModuleInterface(val files: String*) {
       ports :+ reset
     )
     domains += cd
+  }
+
+  val regs: mutable.ArrayBuffer[Register] = mutable.ArrayBuffer()
+
+  lazy val regToId = regs.zipWithIndex.toMap
+
+  def Reg(w: Width, path: String): Register = {
+    val r = Register(w, path)
+    regs += r
+    r
   }
 
 }

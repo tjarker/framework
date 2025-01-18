@@ -1,6 +1,6 @@
 package framework.types
 
-private class UInt(val width: Width) extends Data {
+class UInt(val width: Width) extends Data {
   override def toString(): String = s"UInt($width)"
 }
 

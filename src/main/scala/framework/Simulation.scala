@@ -7,13 +7,17 @@ import gears.async.default.given
 
 import types.*
 import Time.*
-import ModuleInterface.ClockDomain
+import ModuleInterface.{ClockDomain, Register}
 
 import scala.collection.mutable
 
 import scala.util.Success
 
 trait Sim {
+
+  def currentClock: ClockPort
+
+  def withClock(c: ClockPort): Sim
 
   def hierarchicalThreadName: String
 
@@ -31,7 +35,11 @@ trait Sim {
   def poke(p: Input[Bits], value: BigInt)(using Async): Unit
   def peek(p: Port[Bits])(using Async): BigInt
 
+  def peekReg(r: Register)(using Async): BigInt
+
   def step(c: ClockPort, steps: Int)(using Async): Unit
+
+  def step(steps: Int)(using Async): Unit = step(currentClock, steps)
 
   def join(t: Thread)(using Async): Unit
 
@@ -44,12 +52,24 @@ trait Sim {
 
 case class ForkContext(c: Option[Component])
 
+def withClock[T](c: ClockPort)(block: (Sim, Async) ?=> T)(using Sim, Async) = {
+    val s = summon[Sim]
+    
+    val newS = s.withClock(c)
+
+    block(using newS, summon[Async])
+}
+
+def stepDomain(steps: Int)(using Sim, Async) = {
+    summon[Sim].step(steps)
+}
+
 class Fork[T](name: String, block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Spawn) {
 
     val s = summon[Sim]
     val a = summon[Async.Spawn]
 
-    val sim = new Simulation(s.ctrl, SyncChannel(), name)
+    val sim = new Simulation(s.ctrl, SyncChannel(), name, s.currentClock)
 
     var vThread = Option.empty[Thread]
     
@@ -79,11 +99,11 @@ class Fork[T](name: String, block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Sp
 
 object Simulation {
 
-  def apply[M <: ModuleInterface](m: M, timeUnit: Time)(
+  def apply[M <: ModuleInterface](m: M, timeUnit: Time, debug: Boolean = false)(
       block: (Sim, Async.Spawn) ?=> M => Unit
   ): Unit = Async.blocking {
-    val ctrl = new SimulationController(SyncChannel(), m, timeUnit)
-    val sim = new Simulation(ctrl, SyncChannel(), "root")
+    val ctrl = new SimulationController(SyncChannel(), m, timeUnit, debug)
+    val sim = new Simulation(ctrl, SyncChannel(), "root", m.domains.head.clock)
     given Sim = sim
     given ForkContext = ForkContext(None)
     val controller = Future(ctrl.run())
@@ -116,12 +136,17 @@ class Simulation(
     val ctrl: SimulationController,
     response: SyncChannel[SimulationController.Response],
     val hierarchicalThreadName: String,
+    val currentClock: ClockPort
 ) extends Sim {
 
   import SimulationController.Command.*
   import SimulationController.Response.*
 
   private val childThreads = collection.mutable.ListBuffer[Future[?]]()
+
+  def withClock(c: ClockPort): Sim = {
+    new Simulation(ctrl, response, hierarchicalThreadName, c)
+  }
 
   def addChildThread(f: Future[?]): Unit = {
     childThreads += f
@@ -148,6 +173,15 @@ class Simulation(
       case _ => throw new RuntimeException("Unexpected response")
     }
     r
+  }
+
+  def peekReg(r: Register)(using Async): BigInt = {
+    ctrl.sendCommand(PeekReg(Thread.currentThread, r))
+    val res = response.read() match {
+      case Right(Peeked(value)) => value
+      case _ => throw new RuntimeException("Unexpected response")
+    }
+    res
   }
 
   def step(c: ClockPort, steps: Int)(using Async): Unit = {
@@ -189,6 +223,8 @@ object SimulationController {
     case Peek(t: Thread, p: Port[Bits]) extends Command(t)
     case Step(t: Thread, c: ClockPort, steps: Int) extends Command(t)
 
+    case PeekReg(t: Thread, r: Register) extends Command(t)
+
     case MarkSleeping(t: Thread) extends Command(t)
     case MarkRunning(t: Thread) extends Command(t)
 
@@ -221,8 +257,9 @@ object SimulationController {
 
 class SimulationController(
     commands: SyncChannel[SimulationController.Command],
-    dut: ModuleInterface,
-    timeUnit: Time
+    val dut: ModuleInterface,
+    timeUnit: Time,
+    debug: Boolean
 ) {
 
   import SimulationController.*
@@ -277,7 +314,7 @@ class SimulationController(
   private var finish = false
   private var abort = Option.empty[(Thread, Throwable)]
 
-  val logger = Logger(false)
+  val logger = Logger(debug)
 
   val nextNegEdge = mutable.Map[ClockDomain, AbsoluteTime]()
   dut.domains.foreach { cd =>
@@ -445,6 +482,11 @@ class SimulationController(
           model.peekInput(dut.portToId(p))
         case Output(_) => model.peekOutput(dut.portToId(p), p.width.toInt)
       logger.info("cmd", s"Thread ${names(t)} peeked $p = $v")
+      respond(t).send(Peeked(v))
+
+    case PeekReg(t, r) =>
+      val v = model.peekRegister(dut.regToId(r), r.w.toInt)
+      logger.info("cmd", s"Thread ${names(t)} peeked register $r = $v")
       respond(t).send(Peeked(v))
 
     case Step(t, c, steps) =>
