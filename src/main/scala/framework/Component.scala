@@ -21,7 +21,7 @@ object Phase {
         fs: mutable.ListBuffer[(Component, Fork[?])]
     ): Unit = {
       c match
-        case r: SimulationPhase => fs += c -> forkComp(c, "run", { r.run() })
+        case r: SimulationPhase => fs += c -> forkComp(c, "run", { r.sim() })
         case _                  =>
       c.getChildren.foreach(c => inner(c, fs))
     }
@@ -73,7 +73,7 @@ object Phase {
 }
 
 trait SimulationPhase extends Phase {
-  def run()(using Sim, Async.Spawn): Unit
+  def sim()(using Sim, Async.Spawn): Unit
 }
 trait ReportPhase extends Phase {
   def report(): Unit
@@ -90,7 +90,7 @@ trait TestPhase extends Phase {
 object Component {
   def root[C <: Component](c: C): C = {
     c.hierarchy = Hierarchy(null, mutable.ListBuffer())
-    c.name = "testRoot"
+    c.name = "test"
     c.initComponentHierarchy()
     // Logger.info("sim", "done initializing component hierarchy")
     c
@@ -151,11 +151,25 @@ trait ExitConsensus {
   def registerCondition(condition: => Boolean): Unit
 }
 
-abstract class Driver[T <: Transaction] extends Component with SimulationPhase {
+def runTest[M <: ModuleInterface](dut: M, res: Time)(testConstructor: M => TestCase): Unit = {
+  Simulation(dut, res) { dut =>
+    val test = Component.root(testConstructor(dut))
+    Phase.run(test)
+    Phase.reset(test)
+    Phase.test(test)
+    Phase.report(test)
+  }
+}
 
-  val txChan = Channel[T]()
+abstract class TestCase extends Component with TestPhase {
+}
 
-  def next()(using Sim, Async): T = {
+abstract class Driver[A <: Transaction, B <: Transaction] extends Component with SimulationPhase {
+
+  val txChan = Channel[A]()
+  val respChan = Channel[B]()
+
+  def next()(using Sim, Async): A = {
     info("Waiting for next transaction")
     txChan.read() match {
       case Ok(t)  => t
@@ -163,17 +177,19 @@ abstract class Driver[T <: Transaction] extends Component with SimulationPhase {
     }
   }
 
+  def respond(b: B)(using Sim, Async): Unit = respChan.send(b)
+
 }
 
-class Sequencer[T <: Transaction](txChan: Channel[T])
+class Sequencer[A <: Transaction, B <: Transaction](txChan: Channel[A], respChan: Channel[B])
     extends Component
     with SimulationPhase {
 
-  val seqChan = Channel[Sequence[T]]()
+  val seqChan = Channel[Sequence[A,B]]()
 
-  def play(s: Sequence[T])(using Sim, Async): Unit = seqChan.send(s)
+  def play(s: Sequence[A,B])(using Sim, Async): Unit = seqChan.send(s)
 
-  def run()(using Sim, Async.Spawn): Unit = {
+  def sim()(using Sim, Async.Spawn): Unit = {
 
     while (true) {
       info("Waiting for next sequence")
@@ -185,11 +201,16 @@ class Sequencer[T <: Transaction](txChan: Channel[T])
 
   }
 
-  def playSeq(s: Sequence[T])(using Sim, Async.Spawn): Unit = {
+  def playSeq(s: Sequence[A,B])(using Sim, Async.Spawn): Unit = {
     info("Playing sequence")
 
-    for (t <- s) {
+    s.foreach { t =>
+      info(s"Playing transaction $t")
       txChan.send(t)
+      respChan.read() match {
+        case Ok(b) => b
+        case Err(_) => throw new Exception("No response")
+      }
     }
     info("Sequence done")
   }

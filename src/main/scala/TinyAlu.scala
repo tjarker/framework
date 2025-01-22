@@ -141,11 +141,13 @@ class TinyAluBfm(dut: TinyAlu) {
 
 }
 
+
+
 class AluDriver(dut: TinyAlu) extends Component, SimulationPhase {
 
   val tx = Channel[AluRequest]()
   val bfm = TinyAluBfm(dut)
-  def run()(using Sim, Async.Spawn) = {
+  def sim()(using Sim, Async.Spawn) = {
 
     while (true) {
       val t = tx.read().unwrap
@@ -163,7 +165,7 @@ class AluMonitor(dut: TinyAlu) extends Component, SimulationPhase {
   val ap = Channel[AluTransaction]()
   val bfm = TinyAluBfm(dut)
 
-  def run()(using Sim, Async.Spawn) = {
+  def sim()(using Sim, Async.Spawn) = {
 
     while (true) {
       info(s"Waiting for start")
@@ -202,7 +204,7 @@ class AluScoreboard(ap: Channel[AluTransaction])
 
   val txs = collection.mutable.ListBuffer[AluTransaction]()
 
-  def run()(using Sim, Async.Spawn) = {
+  def sim()(using Sim, Async.Spawn) = {
     while (true) {
       val tx = ap.read().unwrap
       txs += tx
@@ -235,7 +237,7 @@ class AluEnv(dut: TinyAlu) extends Component {
 
 }
 
-class AluTest(dut: TinyAlu) extends Component, ResetPhase, TestPhase {
+class AluTest(dut: TinyAlu) extends TestCase, ResetPhase {
 
   val env = new AluEnv(dut)
 
@@ -255,16 +257,4 @@ class AluTest(dut: TinyAlu) extends Component, ResetPhase, TestPhase {
   }
 }
 
-@main def TinyAluUvm(): Unit = Simulation(TinyAlu(), 1.ps) { dut =>
-
-  val test = Component.root(new AluTest(dut))
-
-  Phase.run(test)
-
-  Phase.reset(test)
-
-  Phase.test(test)
-
-  Phase.report(test)
-
-}
+@main def TinyAluUvm(): Unit = runTest(TinyAlu(), 1.ps)(new AluTest(_))

@@ -58,14 +58,12 @@ class toplevel(aw: Int = 10, dw: Int = 32)
 
 }
 
-
 import apb.*
 
-
-class DidacticTest(apb: ApbBfm) extends Component, ResetPhase, TestPhase {
+class DidacticTest(apb: ApbBfm) extends TestCase, ResetPhase {
 
   val driver = ApbProducerDriver(apb)
-  val sequencer = framework.Sequencer(driver.txChan)
+  val sequencer = framework.Sequencer(driver.txChan, driver.respChan)
 
   def reset()(using Sim, Async.Spawn) = {
     apb.reset()
@@ -73,51 +71,43 @@ class DidacticTest(apb: ApbBfm) extends Component, ResetPhase, TestPhase {
 
   def test()(using Sim, Async.Spawn): Unit = {
 
-
     val seq = ApbRandomSeq(10)
-    
 
     sequencer.play(seq)
 
-    seq.start()
+    seq.waitUntilDone()
 
     apb.clk.step(4)
+
+    success("Test done")
 
   }
 
 }
 
-@main def DidactivUVM(): Unit = {
+@main def DidactivUVM(): Unit = runTest(toplevel(10, 32), 1.ns) { dut =>
 
-  Simulation(toplevel(10,32), 1.ns, false) { dut =>
+  val apb = ApbBfm(
+    dut.clk,
+    dut.reset,
+    dut.addr,
+    dut.en,
+    dut.sel,
+    dut.wdata,
+    dut.wr,
+    dut.rdata,
+    dut.ready,
+    dut.slverr
+  )
 
-    val apb = ApbBfm(
-      dut.clk,
-      dut.reset,
-      dut.addr,
-      dut.en,
-      dut.sel,
-      dut.wdata,
-      dut.wr,
-      dut.rdata,
-      dut.ready,
-      dut.slverr
-    )
+  util.Random.setSeed(42)
 
-    val test = Component.root(DidacticTest(apb))
-
-    Phase.run(test)
-    Phase.reset(test)
-    Phase.test(test)
-    Phase.report(test)
-
-  }
+  DidacticTest(apb)
 }
 
 @main def DidacticSim(): Unit = {
 
-
-  Simulation(toplevel(10,32), 1.ns) { dut =>
+  Simulation(toplevel(10, 32), 1.ns) { dut =>
 
     val apb = ApbBfm(
       dut.clk,
@@ -132,10 +122,10 @@ class DidacticTest(apb: ApbBfm) extends Component, ResetPhase, TestPhase {
       dut.slverr
     )
 
-    dut.pmod1Gpi.poke(0xF)
-    
+    dut.pmod1Gpi.poke(0xf)
+
     apb.reset()
-    
+
     println(apb.write(0x0, 1234))
     println(apb.write(0x0, 5678))
 

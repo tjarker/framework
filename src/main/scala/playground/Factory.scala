@@ -38,6 +38,16 @@ object UVMFactory {
       .asInstanceOf[T]
   }
 
+  def createUnsafe[T <: UVMComponent: ClassTag](args: Any*): T = {
+    val tag = implicitly[ClassTag[T]]
+    val realTag = tagMapping(tag)
+    println(args.map(_.getClass).mkString(","))
+    realTag.runtimeClass
+      .getDeclaredConstructor(args.map(_.getClass)*)
+      .newInstance(args*)
+      .asInstanceOf[T]
+  }
+
   def registerOverride[T <: UVMComponent: ClassTag, U <: T: ClassTag]: Unit = {
     val tag = implicitly[ClassTag[T]]
     val realTag = tagMapping(tag)
@@ -47,8 +57,8 @@ object UVMFactory {
 }
 
 // Define sample Driver and Monitor components
-class Driver(val name: String) extends UVMComponent {
-  def drive(): Unit = println(s"$name is driving.")
+class Driver(val name: String, val msg: String) extends UVMComponent {
+  def drive(): Unit = println(s"$name is driving with message: $msg.")
 }
 
 class Monitor(val name: String) extends UVMComponent {
@@ -58,15 +68,15 @@ class Monitor(val name: String) extends UVMComponent {
 @main def testFactory(): Unit = {
 
 // Register components in the factory by type
-  // UVMFactory.register[Driver]
-  // UVMFactory.register[Monitor]
+  UVMFactory.register[Driver]
+  UVMFactory.register[Monitor]
 
 // Create components using the factory by type
-  val driver = UVMFactory.create[Driver]("driver1")
+  val driver = UVMFactory.createUnsafe[Driver]("driver1", "hello")
   val monitor = UVMFactory.create[Monitor]("monitor1")
 
 // Override the Driver with a new implementation
-  class CustomDriver(name: String) extends Driver(name) {
+  class CustomDriver(name: String) extends Driver(name, "custom message") {
     override def drive(): Unit = println(s"$name is custom driving.")
   }
 

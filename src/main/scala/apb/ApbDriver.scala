@@ -6,17 +6,15 @@ import gears.async.Async
 import framework.types.*
 import framework.types.stepUntil
 
-abstract class ApbBaseDriver(bfm: ApbBfm) extends Driver[ApbTransaction] {
+abstract class ApbBaseDriver(bfm: ApbBfm) extends Driver[ApbTransaction, ApbTransaction] {
 
-  var driverLoopHandle: Option[Fork[?]] = None
-
-  override def run()(using Sim, Spawn): Unit = {
+  override def sim()(using Sim, Spawn): Unit = {
 
     driverLoop()
 
   }
 
-  def drivePins(tx: ApbTransaction)(using Sim, Async): Unit
+  def drivePins(tx: ApbTransaction)(using Sim, Async): ApbTransaction
 
 
   def driverLoop()(using Sim, Async): Unit = while(true) {
@@ -28,17 +26,17 @@ abstract class ApbBaseDriver(bfm: ApbBfm) extends Driver[ApbTransaction] {
     info(s"Got transaction $tx")
 
     info("Driving pins")
-    drivePins(tx)
+    val resp = drivePins(tx)
 
-
-
+    info(s"Responding with $resp")
+    respond(resp)
   }
 
 }
 
 class ApbProducerDriver(bfm: ApbBfm) extends ApbBaseDriver(bfm) {
 
-  override def drivePins(tx: ApbTransaction)(using Sim, Async): Unit = {
+  override def drivePins(tx: ApbTransaction)(using Sim, Async): ApbTransaction = {
 
     info("Driving pins for producer")
 
@@ -69,6 +67,16 @@ class ApbProducerDriver(bfm: ApbBfm) extends ApbBaseDriver(bfm) {
 
     info(s"Got response: $rdata, error: $err")
 
+
+    val resp = tx.copy()
+
+    resp.slverr = err
+    tx.op match {
+      case OpType.Read => resp.data = rdata
+      case _ => ()
+    }
+
+    resp
   }
 
 }

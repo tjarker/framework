@@ -4,51 +4,63 @@ import gears.async.*
 import framework.*
 
 
-class ApbBaseSeq(using Async, Sim) extends Sequence[ApbTransaction] {
+class ApbBaseSeq(using Async.Spawn, Sim) extends Sequence[ApbTransaction, ApbTransaction] {
 
   val delayBeforeTx = Rand.between(0, 15)
 
-  def body: Unit = {
+  def body(): Unit = {
     
     if delayBeforeTx > 0 then stepDomain(delayBeforeTx)
 
   }
 
-}
+  def checkResp(resp: ApbTransaction): Unit = {
+    if resp.slverr then {
+      error("Slave error detected")
+    }
+  }
 
-
-class ApbSingleSeq(using Async, Sim) extends ApbBaseSeq {
-
-  override def body: Unit = {
-    super.body
-
-    doYield(new ApbTransaction)
+  def yieldApbTx(tx: ApbTransaction): Unit = {
+    checkResp(yieldTx(tx))
   }
 
 }
 
-class ApbSingleZdSeq(using Async, Sim) extends ApbSingleSeq {
+
+class ApbSingleSeq(using Async.Spawn, Sim) extends ApbBaseSeq {
+
+  override def body(): Unit = {
+    super.body()
+
+    yieldApbTx(new ApbTransaction)
+  }
+
+}
+
+class ApbSingleZdSeq(using Async.Spawn, Sim) extends ApbSingleSeq {
 
   override val delayBeforeTx: Int = 0
 
-  override def body: Unit = {
-    super.body
+  override def body(): Unit = {
+    super.body()
 
     val tx = new ApbTransaction
     tx.noWaitLen = true
 
-    doYield(tx)
+    yieldApbTx(tx)
   }
 
 }
 
-class ApbRandomSeq(len: Int)(using Async, Sim) extends ApbBaseSeq {
+class ApbRandomSeq(len: Int)(using Async.Spawn, Sim) extends ApbBaseSeq {
 
-  override def body: Unit = {
-    super.body
+  override def body(): Unit = {
+    super.body()
 
-    for _ <- 0 until len do {
-      doYield(new ApbTransaction)
+    for i <- 0 until len do {
+      val tx = new ApbTransaction
+      warning(s"Generated transaction $i: $tx")
+      yieldApbTx(tx)
     }
   }
 

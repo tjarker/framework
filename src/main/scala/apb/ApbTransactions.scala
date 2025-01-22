@@ -44,6 +44,22 @@ class ApbTransaction extends Transaction {
 
   override def toString(): String = {
     s"ApbTransaction(op=$op, addr=$addr, data=$data, strb=$strb, slverr=$slverr, normAcc=$normAcc, secAcc=$secAcc, dataAcc=$dataAcc, waitLen=$waitLen)"
-  } 
+  }
+
+  def copy(): this.type = {
+    val tx = new ApbTransaction
+    tx.noWaitLen = noWaitLen
+    tx.maxWaitLen = maxWaitLen
+    tx.op = op
+    tx.addr = addr
+    tx.data = data
+    tx.strb = strb
+    tx.slverr = slverr
+    tx.normAcc = normAcc
+    tx.secAcc = secAcc
+    tx.dataAcc = dataAcc
+    tx.waitLen = waitLen
+    tx.asInstanceOf[this.type]
+  }
 
 }
