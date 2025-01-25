@@ -10,209 +10,214 @@ import gears.async.ChannelMultiplexer
 
 import Result.*
 
-trait Phase
+import java.lang.reflect.Modifier
+import framework.macros.Naming
 
-object Phase {
+class CompBuilder(using Hierarchy) {
 
-  def run(c: Component)(using Sim, Async.Spawn): Unit = {
+  val params = mutable.Map[Any, Any]()
+  val overrides = mutable.Map[ClassTag[?], ClassTag[?]]()
 
-    def inner(
-        c: Component,
-        fs: mutable.ListBuffer[(Component, Fork[?])]
-    ): Unit = {
-      c match
-        case r: SimulationPhase => fs += c -> forkComp(c, "run", { r.sim() })
-        case _                  =>
-      c.getChildren.foreach(c => inner(c, fs))
-    }
-
-    val fs = mutable.ListBuffer[(Component, Fork[?])]()
-    inner(c, fs)
-    // Logger.info("sim", "Started run phase for components:\n - " + fs.map(_._1.toString()).mkString("\n - "))
+  def withParams(kv: (Any, Any)*): CompBuilder = {
+    params.addAll(kv)
+    this
   }
 
-  def test(c: Component)(using Sim, Async.Spawn): Unit = {
-    def inner(
-        c: Component,
-        fs: mutable.ListBuffer[(Component, Fork[?])]
-    ): Unit = {
-      c match
-        case r: TestPhase => fs += c -> forkComp(c, "test", { r.test() })
-        case _            =>
-      c.getChildren.foreach(c => inner(c, fs))
-    }
-    val fs = mutable.ListBuffer[(Component, Fork[?])]()
-    inner(c, fs)
-    // Logger.info("sim", "Started test phase for components:\n - " + fs.map(_._1.toString()).mkString("\n - "))
-    fs.foreach(_._2.join())
+  def withOverride[T <: Component: ClassTag, U <: T: ClassTag]: CompBuilder = {
+    overrides.put(summon[ClassTag[T]], summon[ClassTag[U]])
+    this
   }
 
-  def report(c: Component): Unit = {
-    c match
-      case r: ReportPhase => r.report()
-      case _              =>
-    c.getChildren.foreach(report)
+  inline def create[T <: Component: ClassTag]: T = {
+    Comp.create[T](Naming.enclosingTermName, params.toMap, overrides.toMap)
   }
 
-  def reset(c: Component)(using Sim, Async.Spawn): Unit = {
-    def inner(
-        c: Component,
-        fs: mutable.ListBuffer[(Component, Fork[?])]
-    ): Unit = {
-      c match
-        case r: ResetPhase => fs += c -> forkComp(c, "reset", { r.reset() })
-        case _             =>
-      c.getChildren.foreach(c => inner(c, fs))
-    }
-    val fs = mutable.ListBuffer[(Component, Fork[?])]()
-    inner(c, fs)
-    // Logger.info("sim", "Started reset phase for components:\n - " + fs.map(_._1.toString()).mkString("\n - "))
-    fs.foreach(_._2.join())
+  def create[T <: Component: ClassTag](name: String): T = {
+    Comp.create[T](name, params.toMap, overrides.toMap)
   }
 
 }
 
-trait SimulationPhase extends Phase {
-  def sim()(using Sim, Async.Spawn): Unit
-}
-trait ReportPhase extends Phase {
-  def report(): Unit
-}
+object Comp {
 
-trait ResetPhase extends Phase {
-  def reset()(using Sim, Async.Spawn): Unit
-}
+  def builder(using Hierarchy): CompBuilder = new CompBuilder
 
-trait TestPhase extends Phase {
-  def test()(using Sim, Async.Spawn): Unit
-}
+  def root[C <: Component: ClassTag](c: Hierarchy ?=> C): C = {
 
-object Component {
-  def root[C <: Component](c: C): C = {
-    c.hierarchy = Hierarchy(null, mutable.ListBuffer())
-    c.name = "test"
-    c.initComponentHierarchy()
-    // Logger.info("sim", "done initializing component hierarchy")
-    c
+    val className = summon[ClassTag[C]].runtimeClass.getSimpleName()
+    val instanceName = s"${className.head.toLower}${className.tail}"
+
+    val h =
+      ComponentHierarchy(instanceName, null)
+    val component = c(using h)
+
+    component
   }
-}
 
-case class Hierarchy(parent: Component, children: mutable.ListBuffer[Component])
+  def apply[T <: Component](
+      name: String,
+      c: Hierarchy ?=> T,
+      params: Map[Any, Any],
+      overrides: Map[ClassTag[?], ClassTag[?]]
+  )(using
+      Hierarchy
+  ): T = {
 
-trait Component extends Reportable {
+    val h = summon[Hierarchy]
+    val newHierarchy = ComponentHierarchy(name, h.self)
 
-  private[framework] var name: String = ""
-  private[framework] var hierarchy: Hierarchy = null
-  private[framework] var forkCtx: ForkContext = null
+    params.foreach(kv => newHierarchy.setConfig(kv._1, kv._2))
+    overrides.foreach(kv => newHierarchy.setTypeOverride(kv._1, kv._2))
 
-  private[framework] def getChildren = hierarchy.children
-  private[framework] def getParent = hierarchy.parent
+    val newComponent = c(using newHierarchy)
 
-  private[framework] def initComponentHierarchy()(using
-      ct: ClassTag[Component]
+    h.addChild(newComponent)
+
+    newComponent
+  }
+
+  def apply[T <: Component](name: String, c: Hierarchy ?=> T)(using
+      Hierarchy
+  ): T = {
+    apply(name, c, Map.empty, Map.empty)
+  }
+
+  inline def apply[T <: Component](c: Hierarchy ?=> T)(using
+      Hierarchy
+  ): T = {
+    apply(Naming.enclosingTermName, c)
+  }
+
+  def overrideType[T <: Component: ClassTag, U <: T: ClassTag](using
+      Hierarchy
   ): Unit = {
-
-    def getAllFields(clazz: Class[?]): Seq[java.lang.reflect.Field] = {
-      if (clazz == null || clazz == classOf[Object]) {
-        Seq.empty
-      } else {
-        // Collect fields from the current class
-        val fieldsInClass = clazz.getDeclaredFields.toIndexedSeq
-        // Collect fields from the superclasses and traits
-        val fieldsInSuperclass = getAllFields(clazz.getSuperclass)
-        // Collect fields from the traits, which are part of the class hierarchy
-        val fieldsInInterfaces = clazz.getInterfaces.flatMap(getAllFields)
-
-        fieldsInClass ++ fieldsInSuperclass ++ fieldsInInterfaces
-      }
-    }
-
-    getAllFields(this.getClass)
-      .filter(field => ct.runtimeClass.isAssignableFrom(field.getType))
-      .foreach { field =>
-        field.setAccessible(true) // Make private fields accessible
-        val c = field.get(this).asInstanceOf[Component]
-        c.hierarchy = Hierarchy(this, mutable.ListBuffer())
-        c.name = field.getName
-        c.forkCtx = ForkContext(Some(c))
-        this.hierarchy.children += c
-        c.initComponentHierarchy()
-      }
+    summon[Hierarchy].setTypeOverride(summon[ClassTag[T]], summon[ClassTag[U]])
   }
+
+  def create[T <: Component: ClassTag](
+      name: String,
+      params: Map[Any, Any],
+      overrides: Map[ClassTag[?], ClassTag[?]]
+  )(using
+      Hierarchy
+  ): T = {
+
+    val h = summon[Hierarchy]
+    val classTag =
+      h.tryGetTypeOverride(summon[ClassTag[T]]).getOrElse(summon[ClassTag[T]])
+
+    Comp(
+      name,
+      classTag.runtimeClass
+        .getConstructor(classOf[Hierarchy])
+        .newInstance(summon[Hierarchy])
+        .asInstanceOf[T],
+      params,
+      overrides
+    )
+  }
+
+  def create[T <: Component: ClassTag](name: String)(using Hierarchy): T = {
+    create[T](name, Map.empty, Map.empty)
+  }
+
+  inline def create[T <: Component: ClassTag](using Hierarchy): T = {
+    create[T](Naming.enclosingTermName)
+  }
+
+  def set(kv: (Any, Any))(using Hierarchy): Unit = {
+    summon[Hierarchy].setConfig(kv._1, kv._2)
+  }
+
+  def tryGet(key: Any)(using Hierarchy): Option[Any] = {
+    summon[Hierarchy].getConfig(key)
+  }
+
+  def get(key: Any)(using Hierarchy): Any = {
+    tryGet(key).getOrElse(throw new Exception(s"Key $key not found"))
+  }
+
+  def getOrElse(key: Any, default: Any)(using Hierarchy): Any = {
+    tryGet(key).getOrElse(default)
+  }
+
+  def getConfigs()(using Hierarchy): Map[Any, Any] =
+    summon[Hierarchy].getConfigs
+
+  def printHierarchy(c: Component, indent: Int = 0): Unit = {
+    val spaces = " " * indent
+    println(s"${spaces}${c.hierarchy.name}")
+    c.hierarchy.getChildren.foreach { child =>
+      printHierarchy(child, indent + 2)
+    }
+  }
+}
+
+trait Component(using Hierarchy) extends Reportable {
+
+  val hierarchy = summon[Hierarchy]
+  val name = hierarchy.name
+  hierarchy.self = this
+
+  val banner =
+    s"""==Component${"=" * (50 - 9 - 2)}
+    | - Name: $name
+    | - Type: ${this.getClass.getSimpleName}
+    | - Config:
+    |     ${Comp
+        .getConfigs()
+        .map(kv => s" - ${kv._1} -> ${kv._2}")
+        .mkString("\n     ")}
+    | - Overrides:
+    |     ${hierarchy.getOverrides
+        .map(kv =>
+          s" - ${kv._1.runtimeClass.getSimpleName()} -> ${kv._2.runtimeClass.getSimpleName()}"
+        )
+        .mkString("\n     ")} 
+    |${"=" * 50}""".stripMargin
+
+  info(banner)
 
   override def toString(): String =
-    if (hierarchy.parent != null) s"${hierarchy.parent.toString()}.${name}"
-    else name
+    if (hierarchy.parent != null)
+      s"${hierarchy.parent.toString()}.${hierarchy.name}"
+    else hierarchy.name
 }
 
-trait ExitConsensus {
-  def raiseObjection(): Unit
-  def dropObjection(): Unit
-  def registerCondition(condition: => Boolean): Unit
+class Child(using Hierarchy) extends Component {
+  info("Child")
 }
 
-def runTest[M <: ModuleInterface](dut: M, res: Time)(testConstructor: M => TestCase): Unit = {
-  Simulation(dut, res) { dut =>
-    val test = Component.root(testConstructor(dut))
-    Phase.run(test)
-    Phase.reset(test)
-    Phase.test(test)
-    Phase.report(test)
-  }
+class ChildDerived(using Hierarchy) extends Child {
+  info("ChildDerived")
+  info(Comp.get("key"))
+  Comp.set("key" -> "child")
+  info(Comp.get("key"))
 }
 
-abstract class TestCase extends Component with TestPhase {
+class Parent(using Hierarchy) extends Component {
+  info("Parent")
+  info(Comp.get("key"))
+  Comp.set("key" -> "parent")
+
+  val child = Comp.builder
+    .withParams(
+      "key" -> "parent",
+      "key2" -> "child2"
+    )
+    .withOverride[Child, ChildDerived]
+    .create[Child]
+
+  info(Comp.get("key"))
 }
 
-abstract class Driver[A <: Transaction, B <: Transaction] extends Component with SimulationPhase {
+@main def testComponent(): Unit = {
+  val root = Comp.root {
 
-  val txChan = Channel[A]()
-  val respChan = Channel[B]()
+    Comp.set("key" -> "top")
 
-  def next()(using Sim, Async): A = {
-    info("Waiting for next transaction")
-    txChan.read() match {
-      case Ok(t)  => t
-      case Err(_) => throw new Exception("No transaction")
-    }
-  }
-
-  def respond(b: B)(using Sim, Async): Unit = respChan.send(b)
-
-}
-
-class Sequencer[A <: Transaction, B <: Transaction](txChan: Channel[A], respChan: Channel[B])
-    extends Component
-    with SimulationPhase {
-
-  val seqChan = Channel[Sequence[A,B]]()
-
-  def play(s: Sequence[A,B])(using Sim, Async): Unit = seqChan.send(s)
-
-  def sim()(using Sim, Async.Spawn): Unit = {
-
-    while (true) {
-      info("Waiting for next sequence")
-      seqChan.read() match {
-        case Ok(s)  => playSeq(s)
-        case Err(_) => throw new Exception("No sequence")
-      }
-    }
-
+    new Parent
   }
 
-  def playSeq(s: Sequence[A,B])(using Sim, Async.Spawn): Unit = {
-    info("Playing sequence")
-
-    s.foreach { t =>
-      info(s"Playing transaction $t")
-      txChan.send(t)
-      respChan.read() match {
-        case Ok(b) => b
-        case Err(_) => throw new Exception("No response")
-      }
-    }
-    info("Sequence done")
-  }
-
+  Comp.printHierarchy(root)
 }

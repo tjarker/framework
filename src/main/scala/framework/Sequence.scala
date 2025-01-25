@@ -12,7 +12,10 @@ abstract class Transaction {
   def copy(): this.type
 }
 
-abstract class Sequence[A <: Transaction,B <: Transaction](using Sim, Async.Spawn) extends Reportable {
+abstract class Sequence[A <: Transaction, B <: Transaction](using
+    Sim,
+    Async.Spawn
+) extends Reportable {
 
   val channel = Channel[Option[A]]()
   val respChannel = Channel[B]()
@@ -22,23 +25,23 @@ abstract class Sequence[A <: Transaction,B <: Transaction](using Sim, Async.Spaw
   protected def yieldTx(t: A): B = {
     channel.send(Some(t))
     respChannel.read() match {
-      case Ok(b) => b
+      case Ok(b)  => b
       case Err(_) => throw new Exception("No response")
     }
   }
 
-  protected def yieldSeq(seq: Sequence[A,B]): Unit = {
+  protected def yieldSeq(seq: Sequence[A, B]): Unit = {
     val resp = mutable.ListBuffer[B]()
     seq.foreach(t => yieldTx(t))
   }
 
   protected def yieldSeq(seq: Seq[A]): Seq[B] = {
-    for(t <- seq) yield yieldTx(t)
+    for (t <- seq) yield yieldTx(t)
   }
 
   def next()(using Sim, Async): Option[A] = {
     channel.read() match {
-      case Ok(t) => t
+      case Ok(t)  => t
       case Err(_) => None
     }
   }
@@ -48,7 +51,7 @@ abstract class Sequence[A <: Transaction,B <: Transaction](using Sim, Async.Spaw
   }
 
   def foreach(f: A => B)(using Sim, Async): Unit = {
-    while(true) {
+    while (true) {
       next() match {
         case Some(t) => {
           respond(f(t))
@@ -63,6 +66,7 @@ abstract class Sequence[A <: Transaction,B <: Transaction](using Sim, Async.Spaw
   }
 
   private val runner = fork {
+    info(s"Starting sequence $this")
     body()
     channel.send(None)
   }
@@ -73,5 +77,83 @@ abstract class Sequence[A <: Transaction,B <: Transaction](using Sim, Async.Spaw
 
 }
 
+object Sequence {
+
+  class Concat[A <: Transaction, B <: Transaction](seqs: Sequence[A, B]*)(using
+      Sim,
+      Async.Spawn
+  ) extends Sequence[A, B] {
+
+    protected def body(): Unit = {
+      for (seq <- seqs) {
+        yieldSeq(seq)
+      }
+    }
+
+  }
+
+  class Map[A <: Transaction, B <: Transaction, C <: Transaction](
+      seq: Sequence[A, C],
+      f: A => B
+  )(using Sim, Async.Spawn)
+      extends Sequence[B, C] {
+
+    protected def body(): Unit = {
+      seq.foreach { t =>
+        yieldTx(f(t))
+      }
+    }
+
+  }
+
+  class Mix[A <: Transaction, B <: Transaction](
+      a: Sequence[A, B],
+      b: Sequence[A, B]
+  )(using Sim, Async.Spawn)
+      extends Sequence[A, B] {
+
+    protected def body(): Unit = {
+
+      var toBeFinished = doStuff()
+
+      yieldSeq(toBeFinished)
+
+    }
+
+    private def doStuff()(using Sim, Async.Spawn): Sequence[A, B] = {
+      while (true) {
+        if util.Random.nextBoolean() then {
+          a.next() match {
+            case Some(t) => {
+              a.respond(yieldTx(t))
+            }
+            case None => return b
+          }
+        } else {
+          b.next() match {
+            case Some(t) => {
+              b.respond(yieldTx(t))
+            }
+            case None => return a
+          }
+        }
+      }
+      return a
+    }
+  }
+
+}
 
 
+abstract class Orchestrator(using Sim, Async.Spawn) {
+
+
+  protected def body(): Unit
+
+
+  def run(): Unit = fork {
+    body()
+  }
+
+
+}

@@ -12,6 +12,7 @@ import ModuleInterface.{ClockDomain, Register}
 import scala.collection.mutable
 
 import scala.util.Success
+import scala.reflect.ClassTag
 
 trait Sim {
 
@@ -48,6 +49,7 @@ trait Sim {
   def abort(e: Throwable)(using Async): Unit
 
   def time: SimulationTime
+
 }
 
 case class ForkContext(c: Option[Component])
@@ -126,7 +128,7 @@ object Simulation {
 
   def forkComp[T](c: Component, phase: String, block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Spawn): Fork[T] = {
     val s = summon[Sim]
-    val name = s.hierarchicalThreadName + "." + s.getChildThreads.size + s"(${c.name}_$phase)"
+    val name = s.hierarchicalThreadName + "." + s.getChildThreads.size + s"(${c.name} in $phase)"
     Fork(name, block)
   }
 
@@ -224,9 +226,6 @@ object SimulationController {
     case Step(t: Thread, c: ClockPort, steps: Int) extends Command(t)
 
     case PeekReg(t: Thread, r: Register) extends Command(t)
-
-    case MarkSleeping(t: Thread) extends Command(t)
-    case MarkRunning(t: Thread) extends Command(t)
 
     case SendToChannel[T](t: Thread, ch: framework.Channel[T]) extends Command(t)
     case WaitForChannel[T](t: Thread, ch: framework.Channel[T]) extends Command(t)
@@ -495,19 +494,12 @@ class SimulationController(
       threadStatus(t) = ThreadStatus.WaitForStep
       logger.info("cmd", s"Thread ${names(t)} want to step $c by $steps (wake up at $wakeup)")
 
-    case MarkSleeping(t) =>
-      threadStatus(t) = ThreadStatus.SelfBlocked
-      logger.info("cmd", s"Marked thread ${names(t)} as sleeping")
-
-    case MarkRunning(t) =>
-      threadStatus(t) = ThreadStatus.Running
-      logger.info("cmd", s"Marked thread ${names(t)} as running")
-
     case SendToChannel(t, ch) =>
       logger.info("cmd", s"Thread ${names(t)} sent to channel")
       if (reads.contains(ch)) {
-        logger.info("cmd", s"Channel has already someone waiting")
+        
         val r = reads(ch)
+        logger.info("cmd", s"Channel has already ${names(r)} someone waiting")
         reads.remove(ch)
         threadStatus(r) = ThreadStatus.Running
       } else {

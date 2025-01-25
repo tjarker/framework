@@ -143,7 +143,7 @@ class TinyAluBfm(dut: TinyAlu) {
 
 
 
-class AluDriver(dut: TinyAlu) extends Component, SimulationPhase {
+class AluDriver(dut: TinyAlu)(using Hierarchy) extends Component, SimulationPhase {
 
   val tx = Channel[AluRequest]()
   val bfm = TinyAluBfm(dut)
@@ -160,7 +160,7 @@ class AluDriver(dut: TinyAlu) extends Component, SimulationPhase {
   }
 }
 
-class AluMonitor(dut: TinyAlu) extends Component, SimulationPhase {
+class AluMonitor(dut: TinyAlu)(using Hierarchy) extends Component, SimulationPhase {
 
   val ap = Channel[AluTransaction]()
   val bfm = TinyAluBfm(dut)
@@ -187,7 +187,7 @@ class AluMonitor(dut: TinyAlu) extends Component, SimulationPhase {
   }
 }
 
-class AluAgent(dut: TinyAlu) extends Component {
+class AluAgent(dut: TinyAlu)(using Hierarchy) extends Component {
 
   val driver = new AluDriver(dut)
   val monitor = new AluMonitor(dut)
@@ -197,7 +197,7 @@ class AluAgent(dut: TinyAlu) extends Component {
 
 }
 
-class AluScoreboard(ap: Channel[AluTransaction])
+class AluScoreboard(ap: Channel[AluTransaction])(using Hierarchy)
     extends Component,
       SimulationPhase,
       ReportPhase {
@@ -227,7 +227,7 @@ class AluScoreboard(ap: Channel[AluTransaction])
 
 }
 
-class AluEnv(dut: TinyAlu) extends Component {
+class AluEnv(dut: TinyAlu)(using Hierarchy) extends Component {
 
   val agent = new AluAgent(dut)
   val scoreboard = new AluScoreboard(agent.ap)
@@ -237,7 +237,7 @@ class AluEnv(dut: TinyAlu) extends Component {
 
 }
 
-class AluTest(dut: TinyAlu) extends TestCase, ResetPhase {
+class AluTest(dut: TinyAlu)(using Hierarchy) extends TestCase, ResetPhase {
 
   val env = new AluEnv(dut)
 
@@ -257,4 +257,4 @@ class AluTest(dut: TinyAlu) extends TestCase, ResetPhase {
   }
 }
 
-@main def TinyAluUvm(): Unit = runTest(TinyAlu(), 1.ps)(new AluTest(_))
+@main def TinyAluUvm(): Unit = Test.run(TinyAlu(), 1.ps)(new AluTest(_))

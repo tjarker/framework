@@ -15,6 +15,16 @@ object Logger {
       Console.println(s"[info] [${YELLOW}$provider${RESET}] ${line}")
     }
   }
+  inline def info(provider: String, time: Time, msg: String): Unit = Logger.synchronized {
+    val lines = msg.split("\n")
+    val framed = "\u001b[38;5;11m"
+    Console.println(
+      s"[info] [${YELLOW}$provider${RESET} @ ${MAGENTA}$time${RESET}] ${lines.head} (${BLUE}${FileContext()}${RESET})"
+    )
+    lines.tail.foreach { line =>
+      Console.println(s"[info] [${YELLOW}$provider${RESET}]@$time ${line}")
+    }
+  }
   inline def info(msg: String): Unit = Logger.synchronized {
     val lines = msg.split("\n")
     Console.println(
@@ -122,7 +132,11 @@ class ComponentLogger(name: String) {
 
 
 trait Reportable {
-  inline def info(msg: String): Unit = Logger.info(this.toString(), msg)
+  inline def info(msg: Any)(using s: Sim = null): Unit = if(s != null) {
+    Logger.info(this.toString(), summon[Sim].time, msg.toString()) 
+  } else {
+    Logger.info(this.toString(), msg.toString())
+  }
   inline def warning(msg: String): Unit = Logger.warning(this.toString(), msg)
   inline def error(msg: String): Unit = Logger.error(this.toString(), msg)
   inline def success(msg: String): Unit = Logger.success(this.toString(), msg)

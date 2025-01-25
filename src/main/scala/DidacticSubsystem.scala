@@ -60,10 +60,10 @@ class toplevel(aw: Int = 10, dw: Int = 32)
 
 import apb.*
 
-class DidacticTest(apb: ApbBfm) extends TestCase, ResetPhase {
+class DidacticTest(apb: ApbBfm)(using Hierarchy) extends TestCase, ResetPhase {
 
   val driver = ApbProducerDriver(apb)
-  val sequencer = framework.Sequencer(driver.txChan, driver.respChan)
+  val sequencer = framework.Sequencer(driver)
 
   def reset()(using Sim, Async.Spawn) = {
     apb.reset()
@@ -85,7 +85,7 @@ class DidacticTest(apb: ApbBfm) extends TestCase, ResetPhase {
 
 }
 
-@main def DidactivUVM(): Unit = runTest(toplevel(10, 32), 1.ns) { dut =>
+@main def DidactivUVM(): Unit = Test.run(toplevel(10, 32), 1.ns) { dut =>
 
   val apb = ApbBfm(
     dut.clk,
