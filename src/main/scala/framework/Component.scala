@@ -13,7 +13,7 @@ import Result.*
 import java.lang.reflect.Modifier
 import framework.macros.Naming
 
-class CompBuilder(using Hierarchy) {
+class CompBuilder {
 
   val params = mutable.Map[Any, Any]()
   val overrides = mutable.Map[ClassTag[?], ClassTag[?]]()
@@ -28,12 +28,21 @@ class CompBuilder(using Hierarchy) {
     this
   }
 
-  inline def create[T <: Component: ClassTag]: T = {
-    Comp.create[T](Naming.enclosingTermName, params.toMap, overrides.toMap)
+  inline def create[T <: Component: ClassTag](using Hierarchy): T = {
+    create[T](Naming.enclosingTermName)
   }
 
-  def create[T <: Component: ClassTag](name: String): T = {
-    Comp.create[T](name, params.toMap, overrides.toMap)
+  def create[T <: Component: ClassTag](name: String)(using Hierarchy): T = {
+    val h = summon[Hierarchy]
+    val newParentHierarchy = h.copy()
+
+    params.foreach(kv => newParentHierarchy.setConfig(kv._1, kv._2))
+    overrides.foreach(kv => newParentHierarchy.setTypeOverride(kv._1, kv._2))
+
+    {
+      given Hierarchy = newParentHierarchy
+      Comp.create[T](name)
+    }
   }
 
 }
@@ -64,14 +73,14 @@ object Comp {
   ): T = {
 
     val h = summon[Hierarchy]
-    val newHierarchy = ComponentHierarchy(name, h.self)
+    val newHierarchy = ComponentHierarchy(name, h)
 
     params.foreach(kv => newHierarchy.setConfig(kv._1, kv._2))
     overrides.foreach(kv => newHierarchy.setTypeOverride(kv._1, kv._2))
 
     val newComponent = c(using newHierarchy)
 
-    h.addChild(newComponent)
+    h.getComponent.get.children += newComponent
 
     newComponent
   }
@@ -106,15 +115,26 @@ object Comp {
     val classTag =
       h.tryGetTypeOverride(summon[ClassTag[T]]).getOrElse(summon[ClassTag[T]])
 
-    Comp(
+    val c = Comp(
       name,
-      classTag.runtimeClass
-        .getConstructor(classOf[Hierarchy])
-        .newInstance(summon[Hierarchy])
-        .asInstanceOf[T],
+      {
+        val i = classTag.runtimeClass
+          .getConstructor(classOf[Hierarchy])
+
+        println(s"got constructor $i")
+          
+        val c = i.newInstance(summon[Hierarchy])
+
+        println(s"Creating $name with ${i.getClass.getSimpleName()}")
+        c.asInstanceOf[T]
+        
+      },
       params,
       overrides
     )
+
+    println(s"Created $name")
+    c
   }
 
   def create[T <: Component: ClassTag](name: String)(using Hierarchy): T = {
@@ -147,17 +167,28 @@ object Comp {
   def printHierarchy(c: Component, indent: Int = 0): Unit = {
     val spaces = " " * indent
     println(s"${spaces}${c.hierarchy.name}")
-    c.hierarchy.getChildren.foreach { child =>
+    c.children.foreach { child =>
       printHierarchy(child, indent + 2)
+    }
+  }
+
+  def printConfigs(c: Component): Unit = {
+    println(
+      s"${c.name}: ${c.hierarchy.asInstanceOf[ComponentHierarchy].config}"
+    )
+    c.children.foreach { child =>
+      printConfigs(child)
     }
   }
 }
 
 trait Component(using Hierarchy) extends Reportable {
 
+  val children = mutable.ListBuffer[Component]()
+
   val hierarchy = summon[Hierarchy]
   val name = hierarchy.name
-  hierarchy.self = this
+  hierarchy.setComponent(this)
 
   val banner =
     s"""==Component${"=" * (50 - 9 - 2)}
@@ -180,44 +211,54 @@ trait Component(using Hierarchy) extends Reportable {
 
   override def toString(): String =
     if (hierarchy.parent != null)
-      s"${hierarchy.parent.toString()}.${hierarchy.name}"
+      s"${hierarchy.parent.getComponent.get.toString()}.${hierarchy.name}"
     else hierarchy.name
+
+  def param[T](key: Any): T = Comp
+    .tryGet(key)
+    .getOrElse(throw new Exception(s"Component $name expects parameter $key"))
+    .asInstanceOf[T]
 }
 
 class Child(using Hierarchy) extends Component {
-  info("Child")
+
+  val a = param("msg")
+
+  info(s"Child says $a")
 }
 
 class ChildDerived(using Hierarchy) extends Child {
-  info("ChildDerived")
-  info(Comp.get("key"))
-  Comp.set("key" -> "child")
-  info(Comp.get("key"))
+
+  val b = param("msg2")
+
+  info(s"ChildDerived says $b")
 }
 
 class Parent(using Hierarchy) extends Component {
-  info("Parent")
-  info(Comp.get("key"))
-  Comp.set("key" -> "parent")
 
   val child = Comp.builder
     .withParams(
-      "key" -> "parent",
-      "key2" -> "child2"
+      "msg" -> "Hello World",
+      "msg2" -> "I am the derived one"
     )
     .withOverride[Child, ChildDerived]
     .create[Child]
 
-  info(Comp.get("key"))
+  val otherChild = Comp.builder
+    .withParams(
+      "msg" -> "Hello World",
+      "msg2" -> "I am the derived one"
+    )
+    .create[Child]
+
 }
 
 @main def testComponent(): Unit = {
   val root = Comp.root {
-
-    Comp.set("key" -> "top")
-
     new Parent
   }
 
   Comp.printHierarchy(root)
+
+  Comp.printConfigs(root)
 }

@@ -87,10 +87,14 @@ abstract class AnalysisComponent[T <: Transaction](using Hierarchy) extends Comp
 
 }
 
-class Sequencer[A <: Transaction, B <: Transaction](
-    drv: Driver[A,B]
-)(using Hierarchy) extends Component
+class Sequencer[A <: Transaction, B <: Transaction](using Hierarchy) extends Component
     with SimulationPhase {
+
+  warning("in sequencer")
+
+  val drv = param[Driver[A, B]]("drv")
+
+  warning("got driver")
 
   val seqChan = Channel[Sequence[A, B]]()
 

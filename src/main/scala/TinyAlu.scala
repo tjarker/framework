@@ -3,10 +3,8 @@ import framework.*
 import types.*
 import Time.*
 
-import gears.async.Async
 import scala.util.boundary
 import TinyAlu.AluRequest
-import gears.async.SyncChannel
 import TinyAlu.AluTransaction
 
 class TinyAlu extends ModuleInterface("src/hdl/sv/tinyalu.sv") {
@@ -143,7 +141,9 @@ class TinyAluBfm(dut: TinyAlu) {
 
 
 
-class AluDriver(dut: TinyAlu)(using Hierarchy) extends Component, SimulationPhase {
+class AluDriver(using Hierarchy) extends Component, SimulationPhase {
+
+  val dut = param[TinyAlu]("dut")
 
   val tx = Channel[AluRequest]()
   val bfm = TinyAluBfm(dut)
@@ -160,7 +160,9 @@ class AluDriver(dut: TinyAlu)(using Hierarchy) extends Component, SimulationPhas
   }
 }
 
-class AluMonitor(dut: TinyAlu)(using Hierarchy) extends Component, SimulationPhase {
+class AluMonitor(using Hierarchy) extends Component, SimulationPhase {
+
+  val dut = param[TinyAlu]("dut")
 
   val ap = Channel[AluTransaction]()
   val bfm = TinyAluBfm(dut)
@@ -187,20 +189,19 @@ class AluMonitor(dut: TinyAlu)(using Hierarchy) extends Component, SimulationPha
   }
 }
 
-class AluAgent(dut: TinyAlu)(using Hierarchy) extends Component {
+class AluAgent(using Hierarchy) extends Component {
 
-  val driver = new AluDriver(dut)
-  val monitor = new AluMonitor(dut)
-
-  val drv = driver.tx
-  val ap = monitor.ap
+  val driver = Comp.create[AluDriver]
+  val monitor = Comp.create[AluMonitor]
 
 }
 
-class AluScoreboard(ap: Channel[AluTransaction])(using Hierarchy)
+class AluScoreboard(using Hierarchy)
     extends Component,
       SimulationPhase,
       ReportPhase {
+
+  val ap = param[Channel[AluTransaction]]("ap")
 
   val txs = collection.mutable.ListBuffer[AluTransaction]()
 
@@ -227,19 +228,20 @@ class AluScoreboard(ap: Channel[AluTransaction])(using Hierarchy)
 
 }
 
-class AluEnv(dut: TinyAlu)(using Hierarchy) extends Component {
+class AluEnv(using Hierarchy) extends Component {
 
-  val agent = new AluAgent(dut)
-  val scoreboard = new AluScoreboard(agent.ap)
-
-  val drv = agent.drv
-  val ap = agent.ap
+  val agent = Comp.create[AluAgent]
+  val scoreboard = Comp.builder
+  .withParams("ap" -> agent.monitor.ap)
+  .create[AluScoreboard]
 
 }
 
 class AluTest(dut: TinyAlu)(using Hierarchy) extends TestCase, ResetPhase {
 
-  val env = new AluEnv(dut)
+  Comp.set("dut", dut)
+
+  val env = Comp.create[AluEnv]
 
   def reset()(using Sim, Async.Spawn) = {
     env.agent.driver.bfm.reset()
@@ -251,10 +253,10 @@ class AluTest(dut: TinyAlu)(using Hierarchy) extends TestCase, ResetPhase {
 
     val txs = Seq.fill(4)(AluRequest.randomize())
 
-    txs.foreach(env.drv.send(_))
+    txs.foreach(env.agent.driver.tx.send(_))
 
     dut.clk.step(10)
   }
 }
 
-@main def TinyAluUvm(): Unit = Test.run(TinyAlu(), 1.ps)(new AluTest(_))
+@main def TinyAluUvm(): Unit = Test.run(new TinyAlu, 1.ps)(new AluTest(_))

@@ -12,5 +12,6 @@ package object framework {
     export types.PeekHandler.given
     export Util.*
 
+    export gears.async.Async
     
 }

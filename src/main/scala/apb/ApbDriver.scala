@@ -6,7 +6,10 @@ import gears.async.Async
 import framework.types.*
 import framework.types.stepUntil
 
-abstract class ApbBaseDriver(bfm: ApbBfm)(using Hierarchy) extends Driver[ApbTransaction, ApbTransaction] {
+abstract class ApbBaseDriver(using Hierarchy) extends Driver[ApbTransaction, ApbTransaction] {
+
+
+  val bfm = param[ApbBfm]("bfm")
 
   override def sim()(using Sim, Spawn): Unit = {
 
@@ -34,7 +37,7 @@ abstract class ApbBaseDriver(bfm: ApbBfm)(using Hierarchy) extends Driver[ApbTra
 
 }
 
-class ApbProducerDriver(bfm: ApbBfm)(using Hierarchy) extends ApbBaseDriver(bfm) {
+class ApbProducerDriver(using Hierarchy) extends ApbBaseDriver {
 
   override def drivePins(tx: ApbTransaction)(using Sim, Async): ApbTransaction = {
 

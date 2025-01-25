@@ -11,11 +11,11 @@ trait Hierarchy {
   def setConfig(key: Any, value: Any): Unit
   def getConfig(key: Any): Option[Any]
   def getConfigs: Map[Any, Any]
-  def parent: Component
-  var self: Component = null
-  def addChild(c: Component): Unit
-  def getChildren: Seq[Component]
+  def parent: Hierarchy
+  def setComponent(c: Component): Unit
+  def getComponent: Option[Component]
   def name: String
+  def copy(): Hierarchy
 }
 
 type OverrideMap = mutable.Map[ClassTag[?], ClassTag[?]]
@@ -23,13 +23,23 @@ type ConfigMap = mutable.Map[Any, Any]
 
 class ComponentHierarchy(
     val name: String,
-    val parent: Component
+    val parent: Hierarchy
 ) extends Hierarchy {
 
   val overrides = mutable.Map[ClassTag[?], ClassTag[?]]()
   val config = mutable.Map[Any, Any]()
 
-  val children = mutable.ListBuffer[Component]()
+  
+
+  var component: Option[Component] = None
+
+  def setComponent(c: Component): Unit = {
+    component = Some(c)
+  }
+
+  def getComponent: Option[Component] = {
+    component
+  }
 
   def setTypeOverride(c: ClassTag[?], overrideTag: ClassTag[?]): Unit = {
     overrides.put(c, overrideTag)
@@ -38,7 +48,7 @@ class ComponentHierarchy(
   def tryGetTypeOverride(c: ClassTag[?]): Option[ClassTag[?]] = {
 
     if (parent != null) {
-      parent.hierarchy.tryGetTypeOverride(c) match {
+      parent.tryGetTypeOverride(c) match {
         case Some(value) => return Some(value)
         case None        => 
       }
@@ -54,7 +64,7 @@ class ComponentHierarchy(
   def getConfig(key: Any): Option[Any] = {
     
     if (parent != null) {
-      parent.hierarchy.getConfig(key) match {
+      parent.getConfig(key) match {
         case Some(value) => return Some(value)
         case None        => 
       }
@@ -66,7 +76,10 @@ class ComponentHierarchy(
 
   def getConfigs: Map[Any, Any] = {
     if (parent != null) {
-      parent.hierarchy.getConfigs ++ config.toSeq
+      val map = mutable.Map[Any, Any]()
+      map ++= config
+      parent.getConfigs.foreach(kv => map.put(kv._1, kv._2))
+      map.toMap
     } else {
       config.toMap
     }
@@ -74,18 +87,21 @@ class ComponentHierarchy(
 
   def getOverrides: Map[ClassTag[?], ClassTag[?]] = {
     if (parent != null) {
-      parent.hierarchy.getOverrides ++ overrides
+      val map = mutable.Map[ClassTag[?], ClassTag[?]]()
+      map ++= overrides
+      parent.getOverrides.foreach(kv => map.put(kv._1, kv._2))
+      map.toMap
     } else {
       overrides.toMap
     }
   }
 
-  def addChild(c: Component): Unit = {
-    children += c
-  }
-
-  def getChildren: Seq[Component] = {
-    children.toSeq
+  def copy(): Hierarchy = {
+    val h = new ComponentHierarchy(name, parent)
+    h.overrides ++= overrides
+    h.config ++= config
+    h.setComponent(component.getOrElse(throw new Exception("Component not set in hierarchy.")))
+    h
   }
 
 }

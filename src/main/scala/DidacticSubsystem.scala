@@ -62,8 +62,15 @@ import apb.*
 
 class DidacticTest(apb: ApbBfm)(using Hierarchy) extends TestCase, ResetPhase {
 
-  val driver = ApbProducerDriver(apb)
-  val sequencer = framework.Sequencer(driver)
+  Comp.set("bfm" -> apb)
+
+  val driver = Comp.create[ApbProducerDriver]
+
+  Comp.set("drv" -> driver)
+
+  val sequencer = Comp.create[Sequencer[ApbTransaction, ApbTransaction]]
+
+  warning("Didactic test")
 
   def reset()(using Sim, Async.Spawn) = {
     apb.reset()
@@ -102,7 +109,10 @@ class DidacticTest(apb: ApbBfm)(using Hierarchy) extends TestCase, ResetPhase {
 
   util.Random.setSeed(42)
 
-  DidacticTest(apb)
+  val t = DidacticTest(apb)
+
+  println("Running test")
+  t
 }
 
 @main def DidacticSim(): Unit = {

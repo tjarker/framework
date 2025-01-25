@@ -18,7 +18,7 @@ object Phase {
       c match
         case r: SimulationPhase => fs += c -> forkComp(c, "run", { r.sim() })
         case _                  =>
-      c.hierarchy.getChildren.foreach(c => inner(c, fs))
+      c.children.foreach(c => inner(c, fs))
     }
 
     val fs = mutable.ListBuffer[(Component, Fork[?])]()
@@ -34,7 +34,7 @@ object Phase {
       c match
         case r: TestPhase => fs += c -> forkComp(c, "test", { r.test() })
         case _            =>
-      c.hierarchy.getChildren.foreach(c => inner(c, fs))
+      c.children.foreach(c => inner(c, fs))
     }
     val fs = mutable.ListBuffer[(Component, Fork[?])]()
     inner(c, fs)
@@ -46,7 +46,7 @@ object Phase {
     c match
       case r: ReportPhase => r.report()
       case _              =>
-    c.hierarchy.getChildren.foreach(report)
+    c.children.foreach(report)
   }
 
   def reset(c: Component)(using Sim, Async.Spawn): Unit = {
@@ -57,7 +57,7 @@ object Phase {
       c match
         case r: ResetPhase => fs += c -> forkComp(c, "reset", { r.reset() })
         case _             =>
-      c.hierarchy.getChildren.foreach(c => inner(c, fs))
+      c.children.foreach(c => inner(c, fs))
     }
     val fs = mutable.ListBuffer[(Component, Fork[?])]()
     inner(c, fs)
