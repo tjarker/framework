@@ -101,10 +101,10 @@ class Fork[T](name: String, block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Sp
 
 object Simulation {
 
-  def apply[M <: ModuleInterface](m: M, timeUnit: Time, debug: Boolean = false)(
+  def apply[M <: ModuleInterface](m: M, timeUnit: Time, wave: Option[String] = None, debug: Boolean = false)(
       block: (Sim, Async.Spawn) ?=> M => Unit
   ): Unit = Async.blocking {
-    val ctrl = new SimulationController(SyncChannel(), m, timeUnit, debug)
+    val ctrl = new SimulationController(SyncChannel(), m, timeUnit, debug, wave)
     val sim = new Simulation(ctrl, SyncChannel(), "root", m.domains.head.clock)
     given Sim = sim
     given ForkContext = ForkContext(None)
@@ -258,7 +258,8 @@ class SimulationController(
     commands: SyncChannel[SimulationController.Command],
     val dut: ModuleInterface,
     timeUnit: Time,
-    debug: Boolean
+    debug: Boolean,
+    wave: Option[String]
 ) {
 
   import SimulationController.*
@@ -294,7 +295,7 @@ class SimulationController(
     VerilatorInterface(
       so,
       dut,
-      "wave/" + dut.name + ".vcd",
+      wave.getOrElse(null),
       timeUnit
     )
 

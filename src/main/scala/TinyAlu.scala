@@ -237,7 +237,7 @@ class AluEnv(using Hierarchy) extends Component {
 
 }
 
-class AluTest(dut: TinyAlu)(using Hierarchy) extends TestCase, ResetPhase {
+class AluTest(dut: TinyAlu)(using Hierarchy) extends Test, ResetPhase {
 
   Comp.set("dut", dut)
 

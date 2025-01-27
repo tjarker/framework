@@ -36,3 +36,21 @@ class Channel[T] {
 
   
 }
+
+class ReceiverPort[T] {
+  val chan = Channel[T]()
+  def read()(using Sim, Async): Result[T, Channel.ChannelError] = chan.read()
+  def connect(sender: SenderPort[T]): Unit = sender.chan match {
+    case Some(_) => throw new Exception("Sender port already connected to receiver")
+    case None => sender.chan = Some(chan)
+  }
+}
+
+class SenderPort[T] {
+  var chan: Option[Channel[T]] = None
+  def send(t: T)(using Sim, Async): Unit = chan.getOrElse(throw new Exception("Sender port not connected to receiver")).send(t)
+  def connect(receiver: ReceiverPort[T]): Unit = chan match {
+    case Some(_) => throw new Exception("Sender port already connected to receiver")
+    case None => chan = Some(receiver.chan)
+  }
+}

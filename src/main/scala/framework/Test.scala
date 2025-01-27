@@ -3,8 +3,8 @@ package framework
 
 object Test {
 
-  def run[M <: ModuleInterface](dut: M, res: Time)(testConstructor: Hierarchy ?=> M => TestCase): Unit = {
-    Simulation(dut, res, debug = true) { dut =>
+  def run[M <: ModuleInterface](dut: M, res: Time, wave: Option[String] = None)(testConstructor: Hierarchy ?=> M => Test): Unit = {
+    Simulation(dut, res, debug = true, wave = wave) { dut =>
       val test = Comp.root(testConstructor(dut))
       Phase.run(test)
       Phase.reset(test)
@@ -17,7 +17,7 @@ object Test {
 
 
 
-abstract class TestCase(using Hierarchy) extends Component with TestPhase {
+abstract class Test(using Hierarchy) extends Component with TestPhase {
 
 
 }

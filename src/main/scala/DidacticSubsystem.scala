@@ -60,15 +60,15 @@ class toplevel(aw: Int = 10, dw: Int = 32)
 
 import apb.*
 
-class DidacticTest(apb: ApbBfm)(using Hierarchy) extends TestCase, ResetPhase {
+class DidacticTest(apb: ApbBfm)(using Hierarchy) extends Test, ResetPhase {
 
   Comp.set("bfm" -> apb)
 
   val driver = Comp.create[ApbProducerDriver]
 
-  Comp.set("drv" -> driver)
-
   val sequencer = Comp.create[Sequencer[ApbTransaction, ApbTransaction]]
+
+  driver.port.connect(sequencer.port)
 
   warning("Didactic test")
 

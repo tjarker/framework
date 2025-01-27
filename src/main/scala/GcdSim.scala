@@ -74,7 +74,7 @@ class GCD extends ModuleInterface("src/hdl/sv/GCD.sv") {
     nums._1.gcd(nums._2)
   }
 
-  Simulation(GCD(), 1.ns) { gcd =>
+  Simulation(GCD(), 1.ns, Some("wave/GcdSim.vcd")) { gcd =>
 
     fork {
       while(true) {
