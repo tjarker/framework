@@ -9,7 +9,6 @@ import Result.*
 
 abstract class Transaction {
 
-  def copy(): this.type
 }
 
 abstract class Sequence[A <: Transaction, B <: Transaction](using
@@ -31,7 +30,6 @@ abstract class Sequence[A <: Transaction, B <: Transaction](using
   }
 
   protected def yieldSeq(seq: Sequence[A, B]): Unit = {
-    val resp = mutable.ListBuffer[B]()
     seq.foreach(t => yieldTx(t))
   }
 

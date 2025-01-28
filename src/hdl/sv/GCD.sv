@@ -1,25 +1,5 @@
-module Hello (
-    input logic clock,
-    input logic reset,
-    input logic x,
-    output logic y
-);
-    logic [7:0] a;
-
-    always_ff @(posedge clock) begin
-        if (reset) begin
-            a <= 0;
-        end else begin
-            a <= { a[6:0], x };
-        end
-    end
-
-    assign y = a[7];
-
-endmodule
-
 module GCD #(
-    parameter int W = 128
+    parameter int W = 32
 )(
     input  logic clock,
     input  logic reset,
@@ -45,13 +25,6 @@ module GCD #(
     logic [W - 1:0] b;
 
     logic w;
-
-    Hello hello (
-        .clock(clock),
-        .reset(reset),
-        .x(loadVal[0]),
-        .y(w)
-    );
 
     assign ack = (state == ack_a || state == ack_result);
     assign result = a;

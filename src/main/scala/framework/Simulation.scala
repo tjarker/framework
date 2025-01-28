@@ -66,7 +66,7 @@ def stepDomain(steps: Int)(using Sim, Async) = {
     summon[Sim].step(steps)
 }
 
-class Fork[T](name: String, block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Spawn) {
+class Fork[T](name: String, block: (Sim, Async.Spawn) ?=> T, group: Seq[Fork[?]])(using Sim, Async.Spawn) {
 
     val s = summon[Sim]
     val a = summon[Async.Spawn]
@@ -95,6 +95,13 @@ class Fork[T](name: String, block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Sp
 
     def join(): Unit = {
       s.join(vThread.get)
+      group.foreach(_.join())
+    }
+
+    def fork[T](block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Spawn): Fork[T] = {
+      val s = summon[Sim]
+      val name = s.hierarchicalThreadName + "." + s.getChildThreads.size
+      Fork(name, block, Seq(this) ++ group)
     }
 
   }
@@ -123,13 +130,13 @@ object Simulation {
   def fork[T](block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Spawn): Fork[T] = {
     val s = summon[Sim]
     val name = s.hierarchicalThreadName + "." + s.getChildThreads.size
-    Fork(name, block)
+    Fork(name, block, Seq.empty)
   }
 
   def forkComp[T](c: Component, phase: String, block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Spawn): Fork[T] = {
     val s = summon[Sim]
     val name = s.hierarchicalThreadName + "." + s.getChildThreads.size + s"(${c.name} in $phase)"
-    Fork(name, block)
+    Fork(name, block, Seq.empty)
   }
 
 }

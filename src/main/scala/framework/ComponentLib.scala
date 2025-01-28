@@ -54,6 +54,12 @@ abstract class Driver[A <: Transaction, B <: Transaction](using Hierarchy)
     }
   }
 
+  protected def foreachTx(f: A => Unit)(using Sim, Async): Unit = {
+    while (true) {
+      f(next())
+    }
+  }
+
   protected def respond(b: B)(using Sim, Async): Unit = port.resp.send(b)
 
   def numOfDrivenTxs: Int = this.synchronized { drivenCnt }
@@ -83,13 +89,15 @@ abstract class Monitor[T <: Transaction](using Hierarchy)
     sender.connect(c)
     listeners += sender
   }
+  def addListener(c: AnalysisComponent[T]): Unit = addListener(c.port)
+  def addListeners(cs: AnalysisComponent[T]*): Unit = cs.foreach(addListener)
 
   def numOfObservedTxs: Int = this.synchronized { observedCnt }
 
 }
 
 
-abstract class AnalysisComponent[T <: Transaction](using Hierarchy) extends Component, SimulationPhase {
+abstract class AnalysisComponent[T <: Transaction](using Hierarchy) extends Component, SimulationPhase, ReportPhase {
 
   val port = ReceiverPort[T]()
 
@@ -97,6 +105,12 @@ abstract class AnalysisComponent[T <: Transaction](using Hierarchy) extends Comp
     port.read() match {
       case Ok(t) => t
       case Err(_) => throw new Exception("No transaction")
+    }
+  }
+
+  protected def foreachTx(f: T => Unit)(using Sim, Async): Unit = {
+    while (true) {
+      f(next())
     }
   }
 

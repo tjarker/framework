@@ -1,7 +1,7 @@
 
 
 module CDC #(
-    parameter int W = 128
+    parameter int W = 32
 )(
     input  logic clk_l,
     input  logic clk_r,
