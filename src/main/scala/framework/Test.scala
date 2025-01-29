@@ -1,5 +1,7 @@
 package framework
 
+import framework.Time.ns
+
 
 object Test {
 
@@ -20,8 +22,6 @@ object Test {
 }
 
 
-
-abstract class Test(using Hierarchy) extends Component with TestPhase {
-
+abstract class Test(using Hierarchy) extends Component, TestPhase  {
 
 }

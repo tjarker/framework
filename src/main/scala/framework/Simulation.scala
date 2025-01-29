@@ -36,6 +36,8 @@ trait Sim {
   def poke(p: Input[Bits], value: BigInt)(using Async): Unit
   def peek(p: Port[Bits])(using Async): BigInt
 
+  def peekMonitor(p: Input[Bits])(using Async): BigInt
+
   def peekReg(r: Register)(using Async): BigInt
 
   def step(c: ClockPort, steps: Int)(using Async): Unit
@@ -54,7 +56,7 @@ trait Sim {
 
 case class ForkContext(c: Option[Component])
 
-def withClock[T](c: ClockPort)(block: (Sim, Async) ?=> T)(using Sim, Async) = {
+def withClockDomain[T](c: ClockPort)(block: (Sim, Async) ?=> T)(using Sim, Async) = {
     val s = summon[Sim]
     
     val newS = s.withClock(c)
@@ -62,7 +64,7 @@ def withClock[T](c: ClockPort)(block: (Sim, Async) ?=> T)(using Sim, Async) = {
     block(using newS, summon[Async])
 }
 
-def stepDomain(steps: Int)(using Sim, Async) = {
+def stepClockDomain(steps: Int)(using Sim, Async) = {
     summon[Sim].step(steps)
 }
 
@@ -184,6 +186,15 @@ class Simulation(
     r
   }
 
+  def peekMonitor(p: Input[Bits])(using Async): BigInt = {
+    ctrl.sendCommand(PeekMonitor(Thread.currentThread, p))
+    val r = response.read() match {
+      case Right(Peeked(value)) => value
+      case _ => throw new RuntimeException("Unexpected response")
+    }
+    r
+  }
+
   def peekReg(r: Register)(using Async): BigInt = {
     ctrl.sendCommand(PeekReg(Thread.currentThread, r))
     val res = response.read() match {
@@ -230,6 +241,7 @@ object SimulationController {
 
     case Poke(t: Thread, p: Input[Bits], value: BigInt) extends Command(t)
     case Peek(t: Thread, p: Port[Bits]) extends Command(t)
+    case PeekMonitor(t: Thread, p: Input[Bits]) extends Command(t)
     case Step(t: Thread, c: ClockPort, steps: Int) extends Command(t)
 
     case PeekReg(t: Thread, r: Register) extends Command(t)
@@ -257,6 +269,7 @@ object SimulationController {
     case BlockedRead
     case SelfBlocked
     case JoinBlocked(t: String)
+    case WaitForMonitorRegion
   }
 
 }
@@ -336,6 +349,8 @@ class SimulationController(
     uncommitedPortState(p) = false
   }
 
+  val latePeeks = mutable.ListBuffer[(Thread, Port[Bits])]()
+
   val inputDriveSkew = dut.inputs.map { p =>
     p -> 0.fs
   }.toMap
@@ -357,6 +372,9 @@ class SimulationController(
         //logger.info("ctrl", s"Handling command $c")
         handleCommand(c)
     }
+
+    var monitorRegion = false
+
     while (true) {
 
       if (finish) {
@@ -378,9 +396,50 @@ class SimulationController(
       logger.info("ctrl", s"""Threads:
                     |  - ${threadStatus.map((t, s) => s"${names(t)}($s) [$t]").mkString("\n  - ")} """.stripMargin)
 
-      
-      if (threadStatus.forall(_._2 != ThreadStatus.Running)) {
+
+      // if some are running -> handle their commands
+      // if all are sleeping but latePeeks is not empty -> peek late
+      // if all are sleeping -> advance time
+
+      if (threadStatus.exists(_._2 == ThreadStatus.Running)) {
+
+        logger.info("ctrl", "Waiting for command")
+        commands.read() match {
+          case Left(_) => logger.error("ctrl", "Unexpected command")
+          case Right(c) =>
+            logger.info("ctrl", s"Received command $c")
+            if (monitorRegion) {
+              c match {
+                case Poke(t, p, value) => throw new Exception("Poke should not be received when threads are running")
+                case _ => ()
+              }
+            }
+            
+            handleCommand(c)
+        }
+
+      } else if (latePeeks.nonEmpty) {
+
+        if (!monitorRegion) {
+          monitorRegion = true
+          logger.info("ctrl", "entering monitor region")
+        }
+        
+
+        logger.info("ctrl", "Peeking late")
+        latePeeks.foreach { case (t, p) =>
+          logger.info("ctrl", s"Peeking $p for ${names(t)}")
+          respond(t).send(Peeked(model.peekInput(dut.portToId(p))))
+          threadStatus(t) = ThreadStatus.Running
+        }
+        latePeeks.clear()
+
+      } else {
+        
         logger.info("ctrl", "All threads sleeping")
+
+        monitorRegion = false
+        logger.info("ctrl", "Exiting monitor region")
 
         val nextTime = queue.nextInteractionTime
 
@@ -404,17 +463,6 @@ class SimulationController(
         interactions.foreach { i =>
           logger.info("ctrl", s"Handling interaction $i")
           handleInteraction(i)
-        }
-
-      } else {
-        
-
-        logger.info("ctrl", "Waiting for command")
-        commands.read() match {
-          case Left(_) => logger.error("ctrl", "Unexpected command")
-          case Right(c) =>
-            logger.info("ctrl", s"Received command $c")
-            handleCommand(c)
         }
 
       }
@@ -490,6 +538,11 @@ class SimulationController(
         case Output(_) => model.peekOutput(dut.portToId(p), p.width.toInt)
       logger.info("cmd", s"Thread ${names(t)} peeked $p = $v")
       respond(t).send(Peeked(v))
+
+    case PeekMonitor(t, p) =>
+      latePeeks.addOne(t -> p)
+      logger.info("cmd", s"Thread ${names(t)} want to peek $p after everyone is done")
+      threadStatus(t) = ThreadStatus.WaitForMonitorRegion
 
     case PeekReg(t, r) =>
       val v = model.peekRegister(dut.regToId(r), r.w.toInt)

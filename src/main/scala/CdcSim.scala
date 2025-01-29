@@ -3,9 +3,6 @@ import framework.given
 import types.*
 import Time.*
 
-import scala.collection.mutable
-import java.nio.file.Path
-
 class CDC extends ModuleInterface("src/hdl/sv/CDC.sv") {
 
   val clk_l = ClockPort(6.ns)

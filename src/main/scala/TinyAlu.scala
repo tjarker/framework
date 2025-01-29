@@ -37,11 +37,11 @@ class TinyAlu extends ModuleInterface("src/hdl/sv/tinyalu.sv") {
 
 object TinyAlu {
 
-  enum Op(val enc: Int) {
-    case Add extends Op(1)
-    case And extends Op(2)
-    case Xor extends Op(3)
-    case Mul extends Op(4)
+  enum Op(val enc: Int, val sym: String) {
+    case Add extends Op(1, "+")
+    case And extends Op(2, "&")
+    case Xor extends Op(3, "^")
+    case Mul extends Op(4, "*")
 
   }
 
@@ -71,11 +71,11 @@ object TinyAlu {
       AluRequest(op, a, b)
     }
 
-    override def toString(): String = s"AluRequest($op, $a, $b)"
+    override def toString(): String = s"AluRequest($a ${op.sym} $b)"
   }
 
   class AluResult(val req: AluRequest, val result: BigInt) extends Transaction {
-    override def toString(): String = s"AluResult($req, $result)"
+    override def toString(): String = s"AluResult($req = $result)"
   }
 
   def prediction(t: AluRequest): AluResult = {
@@ -120,33 +120,27 @@ class TinyAluBfm(dut: TinyAlu) {
   }
 
   def waitForStart()(using Sim, Async) = {
-    dut.clk.stepUntil(dut.start.peek)
+    dut.clk.stepUntil(dut.start.peekMonitor)
   }
 
   def getResult()(using Sim, Async): BigInt = {
     dut.result.peek
   }
 
-}
-
-@main def TinyAluTest(): Unit = Simulation(TinyAlu(), 1.ps) { dut =>
-
-  val bfm = TinyAluBfm(dut)
-
-  bfm.reset()
-
-  for {
-    t <- Seq.fill(4)(AluRequest.randomize())
-  } {
-    val prediction = TinyAlu.prediction(t)
-    bfm.sendRequest(t)
-    dut.clk.stepUntil(dut.done.peek)
-    dut.result.expect(prediction.result)
-
-    dut.clk.step()
+  def observeTransaction()(using Sim, Async): AluResult = {
+    waitForStart()
+    val t = AluRequest(
+      TinyAlu.Op.fromInt(dut.op.peekMonitor.toInt),
+      dut.a.peekMonitor,
+      dut.b.peekMonitor
+    )
+    waitForDone()
+    val res = dut.result.peek
+    AluResult(t, res)
   }
 
 }
+
 
 class AluDriver(using Hierarchy)
     extends Driver[AluRequest, AluResult],
@@ -169,35 +163,18 @@ class AluMonitor(using Hierarchy) extends Monitor[AluResult], SimulationPhase {
   val dut = param[TinyAlu]("dut")
   val bfm = TinyAluBfm(dut)
 
-  def sim()(using Sim, Async.Spawn) = {
-
-    while (true) {
-      info(s"Waiting for start")
-      bfm.waitForStart()
-      info(s"Start detected")
-      val t = AluRequest(
-        TinyAlu.Op.fromInt(dut.op.peek.toInt),
-        dut.a.peek,
-        dut.b.peek
-      )
-      bfm.waitForDone()
-      val res = bfm.getResult()
-      val tx = AluResult(t, res)
-      info(s"Observed transaction: $tx")
+  def sim()(using Sim, Async.Spawn) = forever {
+      val tx = bfm.observeTransaction()
       publish(tx)
       dut.clk.step()
     }
 
-  }
+  
 }
 
 class AluAgent(using Hierarchy) extends Component {
 
-  val driver = Comp.create[AluDriver]
-  val seq = Comp.create[Sequencer[AluRequest, AluResult]]
-  val monitor = Comp.create[AluMonitor]
-
-  driver.port.connect(seq.port)
+  
 
 }
 
@@ -211,49 +188,57 @@ class AluScoreboard(using Hierarchy)
   def sim()(using Sim, Async.Spawn) = foreachTx { tx =>
     val pred = TinyAlu.prediction(tx.req)
     if (tx.result == pred.result) {
-      info(s"Transaction $tx passed")
       passing += tx
     } else {
-      error(
-        s"Transaction $tx failed. Expected ${pred.result}, got ${tx.result}"
-      )
       failing += tx
     }
   }
 
   def report() = {
-    info(
-      s"Passing transactions: ${passing.size}" + "\n" + passing.mkString("\n")
-    )
-    info(
-      s"Failing transactions: ${failing.size}" + "\n" + failing.map(tx => s"$tx (expected ${TinyAlu.prediction(tx.req)})").mkString("\n")
-    )
+    passing.foreach { tx =>
+      info(s"PASSED: $tx")
+    }
+    failing.foreach { tx =>
+      if (Config.get[AluTestConfig].CheckErrors) {
+        error(s"FAILED: $tx expected ${TinyAlu.prediction(tx.req)}")
+      } else {
+        info(s"FAILED: $tx expected ${TinyAlu.prediction(tx.req)}")
+      }
+    }
   }
 
 }
 
 class AluCoverage(using Hierarchy) extends AnalysisComponent[AluResult] {
 
-  val ops = mutable.Map[TinyAlu.Op, Int]().withDefaultValue(0)
+  val ops = mutable.Map[TinyAlu.Op, Int](TinyAlu.Op.values.map(_ -> 0)*)
 
   def sim()(using Sim, Async.Spawn) = foreachTx { tx =>
     ops(tx.req.op) += 1
   }
 
   def report() = {
-    val str = ops.map { case (op, cnt) => s"$op: $cnt hits" }.mkString("\n")
-    info(s"Coverage:\n$str")
+    if (Config.get[AluTestConfig].CoverageErrors) {
+      ops.foreach { case (op, cnt) =>
+        if (cnt == 0) error(s"Operation $op not covered")
+      }
+      if (!ops.exists(_._2 == 0)) info("All operations covered")
+    }
   }
 
 }
 
 class AluEnv(using Hierarchy) extends Component {
 
-  val agent = Comp.create[AluAgent]
+  val driver = Comp.create[AluDriver]
+  val seq = Comp.create[Sequencer[AluRequest, AluResult]]
+
+  val monitor = Comp.create[AluMonitor]
   val scoreboard = Comp.create[AluScoreboard]
   val coverage = Comp.create[AluCoverage]
 
-  agent.monitor.addListeners(scoreboard, coverage)
+  driver.port.connect(seq.port)
+  monitor.addListeners(scoreboard, coverage)
 }
 
 class RandomSeq(using Sim, Async.Spawn)
@@ -272,9 +257,7 @@ class MaxSeq(using Sim, Async.Spawn) extends Sequence[AluRequest, AluResult] {
 
   protected def body(): Unit = {
     for (op <- TinyAlu.Op.values) {
-      val a = 0xff
-      val b = 0xff
-      yieldTx(AluRequest(op, a, b))
+      yieldTx(AluRequest(op, 0xFF, 0xFF))
     }
   }
 }
@@ -326,9 +309,22 @@ class TestAllSeqParallel(using Sim, Async.Spawn)
   }
 }
 
+class AluTestConfig {
+  val CoverageErrors = true
+  val CheckErrors = true
+}
+
+class AluTestConfigNoErr extends AluTestConfig {
+  override val CoverageErrors = false
+  override val CheckErrors = false
+}
+
 class AluTest(dut: TinyAlu)(using Hierarchy) extends Test, ResetPhase {
 
-  Comp.set("dut", dut)
+  Config.set("dut", dut)
+
+  //Config.overrideConfig[AluTestConfig, AluTestConfigNoErr]
+
   val bfm = TinyAluBfm(dut)
   val env = Comp.create[AluEnv]
 
@@ -336,13 +332,24 @@ class AluTest(dut: TinyAlu)(using Hierarchy) extends Test, ResetPhase {
     bfm.reset()
   }
 
+  def sequence()(using Sim, Async.Spawn): Sequence[AluRequest, AluResult] = TestAllSeq()
+
   def test()(using Sim, Async.Spawn) = {
     util.Random.setSeed(42)
-    val seq = TestAllSeq()
-    env.agent.seq.play(seq)
+    val seq = sequence()
+    env.seq.play(seq)
     seq.waitUntilDone()
   }
 }
 
-@main def TinyAluUvm(): Unit =
-  Test.run(new TinyAlu, 1.ps, Some("alu.vcd"))(new AluTest(_))
+class FibonacciTest(dut: TinyAlu)(using Hierarchy) extends AluTest(dut) {
+
+  override def sequence()(using Sim, Async.Spawn) = FibonacciSeq()
+
+}
+
+@main def AluTestRandom(): Unit =
+  Test.run(new TinyAlu, 1.ps, Some("alu_rand.vcd"))(new AluTest(_))
+
+@main def AluTestFibonacci(): Unit =
+  Test.run(new TinyAlu, 1.ps, Some("alu_fib.vcd"))(new FibonacciTest(_))

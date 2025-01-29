@@ -18,7 +18,7 @@ class CompBuilder {
   val params = mutable.Map[Any, Any]()
   val overrides = mutable.Map[ClassTag[?], ClassTag[?]]()
 
-  def withParams(kv: (Any, Any)*): CompBuilder = {
+  def withConfig(kv: (Any, Any)*): CompBuilder = {
     params.addAll(kv)
     this
   }
@@ -145,24 +145,9 @@ object Comp {
     create[T](Naming.enclosingTermName)
   }
 
-  def set(kv: (Any, Any))(using Hierarchy): Unit = {
-    summon[Hierarchy].setConfig(kv._1, kv._2)
-  }
+  
 
-  def tryGet(key: Any)(using Hierarchy): Option[Any] = {
-    summon[Hierarchy].getConfig(key)
-  }
-
-  def get(key: Any)(using Hierarchy): Any = {
-    tryGet(key).getOrElse(throw new Exception(s"Key $key not found"))
-  }
-
-  def getOrElse(key: Any, default: Any)(using Hierarchy): Any = {
-    tryGet(key).getOrElse(default)
-  }
-
-  def getConfigs()(using Hierarchy): Map[Any, Any] =
-    summon[Hierarchy].getConfigs
+  
 
   def printHierarchy(c: Component, indent: Int = 0): Unit = {
     val spaces = " " * indent
@@ -172,14 +157,7 @@ object Comp {
     }
   }
 
-  def printConfigs(c: Component): Unit = {
-    println(
-      s"${c.name}: ${c.hierarchy.asInstanceOf[ComponentHierarchy].config}"
-    )
-    c.children.foreach { child =>
-      printConfigs(child)
-    }
-  }
+  
 }
 
 trait Component(using Hierarchy) extends Reportable {
@@ -195,7 +173,7 @@ trait Component(using Hierarchy) extends Reportable {
     | - Name: $name
     | - Type: ${this.getClass.getSimpleName}
     | - Config:
-    |     ${Comp
+    |     ${Config
         .getConfigs()
         .map(kv => s" - ${kv._1} -> ${kv._2}")
         .mkString("\n     ")}
@@ -214,51 +192,10 @@ trait Component(using Hierarchy) extends Reportable {
       s"${hierarchy.parent.getComponent.get.toString()}.${hierarchy.name}"
     else hierarchy.name
 
-  def param[T](key: Any): T = Comp
+  def param[T](key: Any): T = Config
     .tryGet(key)
     .getOrElse(throw new Exception(s"Component $name expects parameter $key"))
     .asInstanceOf[T]
 }
 
-class Child(using Hierarchy) extends Component {
 
-  val a = param("msg")
-
-  info(s"Child says $a")
-}
-
-class ChildDerived(using Hierarchy) extends Child {
-
-  val b = param("msg2")
-
-  info(s"ChildDerived says $b")
-}
-
-class Parent(using Hierarchy) extends Component {
-
-  val child = Comp.builder
-    .withParams(
-      "msg" -> "Hello World",
-      "msg2" -> "I am the derived one"
-    )
-    .withOverride[Child, ChildDerived]
-    .create[Child]
-
-  val otherChild = Comp.builder
-    .withParams(
-      "msg" -> "Hello World",
-      "msg2" -> "I am the derived one"
-    )
-    .create[Child]
-
-}
-
-@main def testComponent(): Unit = {
-  val root = Comp.root {
-    new Parent
-  }
-
-  Comp.printHierarchy(root)
-
-  Comp.printConfigs(root)
-}

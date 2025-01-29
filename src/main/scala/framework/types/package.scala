@@ -43,6 +43,11 @@ package object types {
       summon[PeekHandler[T,V]].peek(p)
     }
   }
+  extension [T <: Data](p: Input[T]) {
+    def peekMonitor[V](using PeekHandler[T, V], Sim, Async): V = {
+      summon[PeekHandler[T,V]].peekMonitor(p)
+    }
+  }
 
   extension [T <: Data](p: Output[T]) {
     inline def expect[V](value: V)(using PeekHandler[T,V], Sim, Async): Unit = {

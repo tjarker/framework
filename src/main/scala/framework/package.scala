@@ -14,4 +14,10 @@ package object framework {
 
     export gears.async.Async
     
+    def forever(body: => Unit): Unit = {
+        while (true) {
+            body
+        }
+    }
 }
+

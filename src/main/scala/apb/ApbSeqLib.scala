@@ -10,7 +10,7 @@ class ApbBaseSeq(using Async.Spawn, Sim) extends Sequence[ApbTransaction, ApbTra
 
   def body(): Unit = {
     
-    if delayBeforeTx > 0 then stepDomain(delayBeforeTx)
+    if delayBeforeTx > 0 then stepClockDomain(delayBeforeTx)
 
   }
 

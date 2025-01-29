@@ -1,9 +1,3 @@
-import com.sun.jna.Native
-
-import scala.collection.mutable
-
-import gears.async.*
-
 import framework.*
 import framework.given
 import types.*

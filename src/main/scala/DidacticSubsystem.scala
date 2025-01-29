@@ -62,7 +62,7 @@ import apb.*
 
 class DidacticTest(apb: ApbBfm)(using Hierarchy) extends Test, ResetPhase {
 
-  Comp.set("bfm" -> apb)
+  Config.set("bfm" -> apb)
 
   val driver = Comp.create[ApbProducerDriver]
 

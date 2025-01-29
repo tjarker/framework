@@ -16,6 +16,10 @@ trait Hierarchy {
   def getComponent: Option[Component]
   def name: String
   def copy(): Hierarchy
+
+
+  def setConfigOverride(c: ClassTag[?], overrideTag: ClassTag[?]): Unit
+  def tryGetConfigOverride(c: ClassTag[?]): Option[ClassTag[?]]
 }
 
 type OverrideMap = mutable.Map[ClassTag[?], ClassTag[?]]
@@ -27,9 +31,25 @@ class ComponentHierarchy(
 ) extends Hierarchy {
 
   val overrides = mutable.Map[ClassTag[?], ClassTag[?]]()
+
+  val configOverrides = mutable.Map[ClassTag[?], ClassTag[?]]()
   val config = mutable.Map[Any, Any]()
 
-  
+  def setConfigOverride(c: ClassTag[?], overrideTag: ClassTag[?]): Unit = {
+    configOverrides.put(c, overrideTag)
+  }
+
+  def tryGetConfigOverride(c: ClassTag[?]): Option[ClassTag[?]] = {
+
+    if (parent != null) {
+      parent.tryGetConfigOverride(c) match {
+        case Some(value) => return Some(value)
+        case None        => 
+      }
+    }
+
+    configOverrides.get(c)
+  }
 
   var component: Option[Component] = None
 
