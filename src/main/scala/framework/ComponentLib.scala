@@ -41,13 +41,24 @@ abstract class Driver[A <: Transaction, B <: Transaction](using Hierarchy)
 
   val port = DriverPort[A, B]()
 
+  val waiting = mutable.ListBuffer[(Channel[Unit], Int)]()
+
   private var drivenCnt = 0
 
   protected def next()(using Sim, Async): A = {
     info("Waiting for next transaction")
     port.tx.read() match {
       case Ok(t) => {
-        this.synchronized { drivenCnt += 1 }
+        this.synchronized { 
+          drivenCnt += 1
+          val toBeWaken = waiting.filter { case (_, n) => drivenCnt == n }.toSeq
+          toBeWaken.foreach { case (chan, n) =>
+            if (drivenCnt == n) {
+              chan.send(())
+              waiting -= (chan -> n)
+            }
+          }
+        }
         t
       }
       case Err(_) => throw new Exception("No transaction")
@@ -64,6 +75,18 @@ abstract class Driver[A <: Transaction, B <: Transaction](using Hierarchy)
 
   def numOfDrivenTxs: Int = this.synchronized { drivenCnt }
 
+  def waitForNumOfDrivenTxs(n: Int)(using Sim, Async): Unit = {
+
+    val chan = Channel[Unit]()
+
+    this.synchronized {
+      waiting += (chan -> n)
+    }
+
+    chan.read()
+
+  }
+
 }
 
 
@@ -75,9 +98,20 @@ abstract class Monitor[T <: Transaction](using Hierarchy)
 
   val listeners = mutable.ListBuffer[SenderPort[T]]()
 
+  val waiting = mutable.ListBuffer[(Channel[Unit], Int)]()
+
   def publish(t: T)(using Sim, Async): Unit = {
 
-    this.synchronized { observedCnt += 1 }
+    this.synchronized { 
+      observedCnt += 1
+      val toBeWaken = waiting.filter { case (_, n) => observedCnt == n }.toSeq
+      toBeWaken.foreach { case (chan, n) =>
+        if (observedCnt == n) {
+          chan.send(())
+          waiting -= (chan -> n)
+        }
+      }
+    }
     listeners.synchronized {
       listeners.foreach(_.send(t))
     }
@@ -93,6 +127,18 @@ abstract class Monitor[T <: Transaction](using Hierarchy)
   def addListeners(cs: AnalysisComponent[T]*): Unit = cs.foreach(addListener)
 
   def numOfObservedTxs: Int = this.synchronized { observedCnt }
+
+  def waitForNumOfObservedTxs(n: Int)(using Sim, Async): Unit = {
+
+    val chan = Channel[Unit]()
+
+    this.synchronized {
+      waiting += (chan -> n)
+    }
+
+    chan.read()
+
+  }
 
 }
 
@@ -128,6 +174,8 @@ class Sequencer[A <: Transaction, B <: Transaction](using Hierarchy) extends Com
   val seqChan = Channel[Sequence[A, B]]()
 
   def play(s: Sequence[A, B])(using Sim, Async): Unit = seqChan.send(s)
+
+  def play(s: Seq[A])(using Sim, Async.Spawn): Unit = seqChan.send(new Sequence.ScalaSeq(s).asInstanceOf[Sequence[A, B]])
 
   def sim()(using Sim, Async.Spawn): Unit = {
 

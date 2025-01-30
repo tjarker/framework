@@ -192,7 +192,7 @@ trait Component(using Hierarchy) extends Reportable {
       s"${hierarchy.parent.getComponent.get.toString()}.${hierarchy.name}"
     else hierarchy.name
 
-  def param[T](key: Any): T = Config
+  def param[T: ClassTag](key: Any): T = Config
     .tryGet(key)
     .getOrElse(throw new Exception(s"Component $name expects parameter $key"))
     .asInstanceOf[T]

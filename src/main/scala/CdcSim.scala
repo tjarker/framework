@@ -82,7 +82,7 @@ class HandshakeReceiver(
 }
 
 @main def CdcSim(): Unit =
-  Simulation(CDC(), 1.ns, Some("cdc.vcd")) { cdc =>
+  Simulation(CDC(), 1.ns, Some("cdc.vcd"),debug = true) { cdc =>
     val magicNum = BigInt("deadbeef", 16)
     fork {
       val sender =

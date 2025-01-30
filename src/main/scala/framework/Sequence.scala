@@ -77,6 +77,17 @@ abstract class Sequence[A <: Transaction, B <: Transaction](using
 
 object Sequence {
 
+  class ScalaSeq[A <: Transaction](seq: Seq[A])(using Sim, Async.Spawn)
+      extends Sequence[A, Transaction] {
+
+    protected def body(): Unit = {
+      for (t <- seq) {
+        yieldTx(t)
+      }
+    }
+
+  }
+
   class Concat[A <: Transaction, B <: Transaction](seqs: Sequence[A, B]*)(using
       Sim,
       Async.Spawn

@@ -30,10 +30,9 @@ class GcdBfm(gcd: GCD) {
   val states = Seq("wait_a", "ack_a", "wait_b", "compare", "update_a", "update_b", "ack_result")
 
   def printState()(using Sim, Async): Unit = {
-    val s = summon[Sim]
     println(s"@${gcd.time}${"=" * 80}")
-    println(s"State: ${states(s.peekReg(gcd.state).toInt)}")
-    println(s"A = ${s.peekReg(gcd.a)} B = ${s.peekReg(gcd.b)}")
+    println(s"State: ${states(gcd.state.peekReg.toInt)}")
+    println(s"A = ${gcd.a.peekReg} B = ${gcd.b.peekReg}")
   }
 
   def transact(value: BigInt, expected: Option[BigInt])(using

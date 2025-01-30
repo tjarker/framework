@@ -332,7 +332,7 @@ class AluTest(dut: TinyAlu)(using Hierarchy) extends Test, ResetPhase {
     bfm.reset()
   }
 
-  def sequence()(using Sim, Async.Spawn): Sequence[AluRequest, AluResult] = TestAllSeq()
+  def sequence()(using Sim, Async.Spawn): Sequence[AluRequest, AluResult] = RandomSeq()
 
   def test()(using Sim, Async.Spawn) = {
     util.Random.setSeed(42)

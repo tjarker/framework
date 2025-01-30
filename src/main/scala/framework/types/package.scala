@@ -2,6 +2,7 @@ package framework
 
 
 import gears.async.*
+import scala.concurrent.ExecutionContext
 
 package object types {
 
@@ -74,8 +75,11 @@ package object types {
       summon[Sim].step(p, steps)
     }
     def stepUntil(pred: => Boolean)(using Sim, Async): Unit = {
+      var cnt = 0
       while (!pred) {
         summon[Sim].step(p, 1)
+        cnt += 1
+        if cnt > 1000 then throw new Exception(s"${summon[Sim].hierarchicalThreadName} timeout on clock $p")
       }
     }
   }

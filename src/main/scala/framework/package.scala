@@ -19,5 +19,12 @@ package object framework {
             body
         }
     }
+
+
+    extension (r: ModuleInterface.Register) {
+        def peekReg(using Sim, Async): BigInt = {
+            summon[Sim].peekReg(r)
+        }
+    }
 }
 
