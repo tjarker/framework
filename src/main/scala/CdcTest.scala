@@ -81,7 +81,7 @@ class HandshakeReceiver(
   }
 }
 
-@main def CdcSim(): Unit =
+@main def CdcTest(): Unit =
   Simulation(CDC(), 1.ns, Some("cdc.vcd"),debug = true) { cdc =>
     val magicNum = BigInt("deadbeef", 16)
     fork {

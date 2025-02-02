@@ -1,15 +1,36 @@
 
 # Requirements
 
+- SBT
 - JDK >= 19
 - Verilator >= 5.002
 
 
-# Running Examples
+# Use Case 1: Greatest Common Divisor
 
 ```sh
-sbt "runMain GcdSim" # a showcase of a simple testbench
-sbt "runMain CdcSim" # a showcase of a testbench with multiple clocks
-sbt "runMain TinyAluTest" # a showcase of a simple testbench with a model
-sbt "runMain TinyAluUvm" # a UVM showcase
+sbt "runMain GcdTest"
 ```
+
+# Use Case 2: Clock Domain Crossing
+
+```sh
+sbt "runMain CdcTest"
+```
+
+
+# Use Case 3: Tiny ALU
+
+```sh
+sbt "runMain TinyAluTest"
+```
+
+# Use Case 4: Didactic SoC Subsystem
+
+```sh
+sbt "runMain DidacticTest"
+```
+
+# Waveforms
+
+The waveforms for each use case are generated in the root directory of the project.
