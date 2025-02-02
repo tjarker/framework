@@ -151,7 +151,6 @@ class AluDriver(using Hierarchy)
   def sim()(using Sim, Async.Spawn) = foreachTx { t =>
     info(s"Sending request: $t")
     bfm.sendRequest(t)
-    info(s"Waiting for done")
     bfm.waitForDone()
     respond(AluResult(t, bfm.getResult()))
   }
@@ -241,8 +240,8 @@ class RandomSeq(using Hierarchy)
 
   protected def body()(using Sim, Async.Spawn): Unit = {
     for (op <- TinyAlu.Op.values) {
-      val a = BigInt(8, scala.util.Random)
-      val b = BigInt(8, scala.util.Random)
+      val a = Rand.uint(8.W)
+      val b = Rand.uint(8.W)
       yieldTx(AluRequest(op, a, b))
     }
   }
