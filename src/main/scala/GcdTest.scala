@@ -81,7 +81,7 @@ class GcdBfm(gcd: GCD) {
   }
 }
 
-@main def GcdSim(): Unit =
+@main def GcdTest(): Unit =
   Simulation(new GCD, 1.ns, Some("gcd.vcd")) { gcd =>
     val bfm = GcdBfm(gcd)
 

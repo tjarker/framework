@@ -87,7 +87,7 @@ class DidacticTest(apb: ApbBfm)(using Hierarchy) extends Test, ResetPhase {
 
 }
 
-@main def DidactivUVM(): Unit = Test.run(toplevel(10, 32), 1.ns, Some("didactic.vcd")) { dut =>
+@main def DidacticSocTest(): Unit = Test.run(toplevel(10, 32), 1.ns, Some("didactic.vcd")) { dut =>
 
   val apb = ApbBfm(
     dut.clk,

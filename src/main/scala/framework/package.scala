@@ -42,5 +42,29 @@ package object framework {
         .getOrElse(throw new Exception(s"Object ${summon[Hierarchy].name} expects parameter ${macros.Naming.enclosingTermName}"))
         .asInstanceOf[T]
     }
+
+    inline def create[T](name: String, c: Hierarchy ?=> T, conf: Map[Any,Any])(using Hierarchy): T = {
+        val newHierarchy = Factory.setupEnvironment(summon[Hierarchy], name, conf, Map.empty)
+        val obj = c(using newHierarchy)
+        obj match {
+            case c: Component => summon[Hierarchy].getComponent.get.children += c
+            case _ => ()
+        }
+        obj
+    }
+
+    inline def create[T](name: String, c: Hierarchy ?=> T)(using Hierarchy): T = {
+        create(name, c, Map.empty)
+    }
+
+    inline def create[T](c: Hierarchy ?=> T)(using Hierarchy): T = {
+        create(macros.Naming.enclosingTermName, c, Map.empty)
+    }
+
+    inline def create[T](c: Hierarchy ?=> T, conf: Map[Any,Any])(using Hierarchy): T = {
+        create(macros.Naming.enclosingTermName, c, conf)
+    }
+
+
 }
 

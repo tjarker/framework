@@ -28,7 +28,7 @@ sbt "runMain TinyAluTest"
 # Use Case 4: Didactic SoC Subsystem
 
 ```sh
-sbt "runMain DidacticTest"
+sbt "runMain DidacticSocTest"
 ```
 
 # Waveforms
