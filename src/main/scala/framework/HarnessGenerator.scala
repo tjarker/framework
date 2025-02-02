@@ -10,19 +10,23 @@ object MakefileGenerator {
   def generate(m: ModuleInterface, p: Path) = {
     Files.createDirectories(p)
     Files.write(
-      p.resolve("Makefile"), 
-      makefile(m).getBytes(StandardCharsets.UTF_8), 
-      StandardOpenOption.CREATE, 
+      p.resolve("Makefile"),
+      makefile(m).getBytes(StandardCharsets.UTF_8),
+      StandardOpenOption.CREATE,
       StandardOpenOption.TRUNCATE_EXISTING
     )
   }
 
-  def makefile(m: ModuleInterface) = 
+  def makefile(m: ModuleInterface) =
     s"""
        |all: build/lib${m.name}.so
        |
-       |build/libV${m.name}.a build/sim.o build/libverilated.a build/V${m.name}__ALL.a: ${m.files.map(Path.of(_).toAbsolutePath()).mkString(" ")} sim.cpp
-       |\tverilator --cc -j $$(shell nproc) --trace --build --Mdir build --top ${m.name} -CFLAGS "-fPIC -fpermissive" ${m.files.map(Path.of(_).toAbsolutePath()).mkString(" ")} sim.cpp
+       |build/libV${m.name}.a build/sim.o build/libverilated.a build/V${m.name}__ALL.a: ${m.files
+        .map(Path.of(_).toAbsolutePath())
+        .mkString(" ")} sim.cpp
+       |\tverilator --cc -j $$(shell nproc) --trace --build --Mdir build --top ${m.name} -CFLAGS "-fPIC -fpermissive" ${m.files
+        .map(Path.of(_).toAbsolutePath())
+        .mkString(" ")} sim.cpp
        |
        |build/lib${m.name}.so: build/libV${m.name}.a build/sim.o build/libverilated.a build/V${m.name}__ALL.a
        |\tg++ -shared -o $$@ build/libV${m.name}.a build/sim.o build/libverilated.a build/V${m.name}__ALL.a  -pthread -lpthread -latomic
@@ -38,13 +42,12 @@ object HarnessGenerator {
   def generate(m: ModuleInterface, p: Path) = {
     Files.createDirectories(p)
     Files.write(
-      p.resolve("sim.cpp"), 
-      harness(m).getBytes(StandardCharsets.UTF_8), 
-      StandardOpenOption.CREATE, 
+      p.resolve("sim.cpp"),
+      harness(m).getBytes(StandardCharsets.UTF_8),
+      StandardOpenOption.CREATE,
       StandardOpenOption.TRUNCATE_EXISTING
     )
   }
-
 
   def harness(m: ModuleInterface): String = {
     val name = m.name
@@ -68,44 +71,50 @@ object HarnessGenerator {
     """.stripMargin
   }
 
-  def includes(name: String) = 
+  def includes(name: String) =
     s"""#include "V$name.h"
        |#include "V${name}___024root.h"
        |#include "verilated.h"
        |#include "verilated_vcd_c.h"
        |#include "stdint.h"""".stripMargin
 
-  def SimContextClass(name: String) = 
+  def SimContextClass(name: String) =
     s"""class SimulationContext_$name {
        |  public:
        |  VerilatedContext* contextp;
        |  V$name* model;
        |  VerilatedVcdC* tfp;
+       |  bool has_wave;
        |
        |  SimulationContext_$name(const char* name, const char* wave_file, const char* time_resolution) {
        |    contextp = new VerilatedContext;;
        |    model = new V$name(contextp, name);;
-       |    tfp = new VerilatedVcdC;;
        |
-       |    contextp->traceEverOn(true);
-       |    model->trace(tfp, 99);
-       |    tfp->set_time_unit(time_resolution);
-       |    tfp->set_time_resolution(time_resolution);
-       |    tfp->open(wave_file);
+       |    has_wave = wave_file != nullptr;
+       |
+       |    if (has_wave) {
+       |      tfp = new VerilatedVcdC;;
+       |
+       |      contextp->traceEverOn(true);
+       |      model->trace(tfp, 99);
+       |      tfp->set_time_unit(time_resolution);
+       |      tfp->set_time_resolution(time_resolution);
+       |      tfp->open(wave_file);
+       |    }
+       |    
        |  }
        |
        |  ~SimulationContext_$name() {
-       |    tfp->flush();
-       |    tfp->close();
+       |    if (has_wave) { tfp->flush(); tfp->close();}
        |    model->final();
        |
        |    delete model;
-       |    delete tfp;
+       |    if (has_wave) delete tfp;
        |    delete contextp;
        |  }
        |};""".stripMargin
 
-  def functionInterfaces(name: String) = 
+  def functionInterfaces(name: String) =
     s"""extern "C" {
        |  SimulationContext_$name * createSimContext_$name(const char* name, const char* wave_file, const char* time_resolution);
        |  void destroySimContext_$name(SimulationContext_$name * id);
@@ -122,8 +131,8 @@ object HarnessGenerator {
        |
        |  void quack_$name();
        |}""".stripMargin
-  
-  def createAndDestroy(name: String) = 
+
+  def createAndDestroy(name: String) =
     s"""SimulationContext_$name * createSimContext_$name(const char* name, const char* wave_file, const char* time_resolution) {
        |  return new SimulationContext_$name(name, wave_file, time_resolution);
        |}
@@ -136,13 +145,13 @@ object HarnessGenerator {
        |  printf("Model for $name says quack!\\n");
        |}""".stripMargin
 
-  def tick(name: String) = 
+  def tick(name: String) =
     s"""void tick_$name(SimulationContext_$name * ctx, uint32_t targetCycle) {
        |  while (ctx->contextp->time() < targetCycle) {
        |    ctx->model->eval();
-       |    ctx->tfp->dump(ctx->contextp->time());
+       |    if (ctx->has_wave) ctx->tfp->dump(ctx->contextp->time());
        |    ctx->contextp->timeInc(1);
-       |    ctx->tfp->flush();
+       |    if (ctx->has_wave) ctx->tfp->flush();
        |  }
        |}""".stripMargin
 
@@ -151,9 +160,9 @@ object HarnessGenerator {
       .filter(_.width.toInt <= 64)
       .map(i => i -> m.portToId(i))
       .map { case (in, id) =>
-        s"case $id: ctx->model->${in.name} = val; break;"  
+        s"case $id: ctx->model->${in.name} = val; break;"
       }
-    
+
     s"""void setInput_${m.name}(SimulationContext_${m.name} * ctx, uint64_t id, uint64_t val) {
        |  switch(id) {
        |    ${narrowInputs.mkString("\n    ")}
@@ -168,9 +177,9 @@ object HarnessGenerator {
       .map(i => i -> m.portToId(i))
       .map { case (in, id) =>
         val words = math.ceil(in.width.toInt / 32.0).toInt
-        s"case $id: for (int i = 0; i < $words; i++) ctx->model->${in.name}.data()[i] = val[i]; break;"  
+        s"case $id: for (int i = 0; i < $words; i++) ctx->model->${in.name}.data()[i] = val[i]; break;"
       }
-    
+
     s"""void setInputWide_${m.name}(SimulationContext_${m.name} * ctx, uint64_t id, uint32_t val[]) {
        |  switch(id) {
        |    ${wideInputs.mkString("\n    ")}
@@ -184,9 +193,9 @@ object HarnessGenerator {
       .filter(_.width.toInt <= 64)
       .map(o => o -> m.portToId(o))
       .map { case (out, id) =>
-        s"case $id: return ctx->model->${out.name}; break;"  
+        s"case $id: return ctx->model->${out.name}; break;"
       }
-    
+
     s"""uint64_t getOutput_${m.name}(SimulationContext_${m.name} * ctx, uint64_t id) {
        |  switch(id) {
        |    ${narrowOutputs.mkString("\n    ")}
@@ -201,9 +210,9 @@ object HarnessGenerator {
       .map(o => o -> m.portToId(o))
       .map { case (out, id) =>
         val words = math.ceil(out.width.toInt / 32.0).toInt
-        s"case $id: for (int i = 0; i < $words; i++) val[i] = ctx->model->${out.name}.data()[i]; break;"  
+        s"case $id: for (int i = 0; i < $words; i++) val[i] = ctx->model->${out.name}.data()[i]; break;"
       }
-    
+
     s"""void getOutputWide_${m.name}(SimulationContext_${m.name} * ctx, uint64_t id, uint32_t val[]) {
        |  switch(id) {
        |    ${wideOutputs.mkString("\n    ")}
@@ -221,9 +230,13 @@ object HarnessGenerator {
       val path = regPathToVerilatorName(m.name, r.path)
       val words = math.ceil(r.w.toInt / 32.0).toInt
       if (words > 2) {
-        s"""case ${m.regToId(r)}: for (int i = 0; i < $words; i++) val[i] = ctx->model->rootp->$path.data()[i]; break;"""
+        s"""case ${m.regToId(
+            r
+          )}: for (int i = 0; i < $words; i++) val[i] = ctx->model->rootp->$path.data()[i]; break;"""
       } else {
-        s"""case ${m.regToId(r)}: *((uint64_t *) val) = ctx->model->rootp->$path; break;"""
+        s"""case ${m.regToId(
+            r
+          )}: *((uint64_t *) val) = ctx->model->rootp->$path; break;"""
       }
     }
     val prints = m.regs.map { r =>

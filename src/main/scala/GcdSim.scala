@@ -1,9 +1,3 @@
-import com.sun.jna.Native
-
-import scala.collection.mutable
-
-import gears.async.*
-
 import framework.*
 import framework.given
 import types.*
@@ -15,8 +9,8 @@ class GCD extends ModuleInterface("src/hdl/sv/GCD.sv") {
   val reset = ResetPort()
   val req = Input(Bool())
   val ack = Output(Bool())
-  val loadVal = Input(UInt(128.W))
-  val result = Output(UInt(128.W))
+  val loadVal = Input(UInt(32.W))
+  val result = Output(UInt(32.W))
 
   domain(clock, reset)(
     req,
@@ -25,24 +19,23 @@ class GCD extends ModuleInterface("src/hdl/sv/GCD.sv") {
     result
   )
 
-  val a = Reg(128.W, "a")
-  val b = Reg(128.W, "b")
+  val a = Reg(32.W, "a")
+  val b = Reg(32.W, "b")
   val state = Reg(3.W, "state")
-  val helloA = Reg(7.W, "hello.a")
 
 }
 
-@main def GcdSim(): Unit = {
+class GcdBfm(gcd: GCD) {
 
-  def printState(gcd: GCD)(using Sim, Async): Unit = {
-    val s = summon[Sim]
+  val states = Seq("wait_a", "ack_a", "wait_b", "compare", "update_a", "update_b", "ack_result")
+
+  def printState()(using Sim, Async): Unit = {
     println(s"@${gcd.time}${"=" * 80}")
-    println(s"State: ${s.peekReg(gcd.state)}")
-    println(s"Regs: ${s.peekReg(gcd.a)} ${s.peekReg(gcd.b)}")
-    println(s"hello.a: ${s.peekReg(gcd.helloA).toString(2)}")
+    println(s"State: ${states(gcd.state.peekReg.toInt)}")
+    println(s"A = ${gcd.a.peekReg} B = ${gcd.b.peekReg}")
   }
 
-  def transact(gcd: GCD, value: BigInt, expected: Option[BigInt])(using
+  def transact(value: BigInt, expected: Option[BigInt])(using
       Sim,
       Async
   ): BigInt = {
@@ -51,7 +44,6 @@ class GCD extends ModuleInterface("src/hdl/sv/GCD.sv") {
     gcd.req.poke(true)
 
     gcd.clock.stepUntil(gcd.ack.peek)
-
 
     val res = gcd.result.peek
     expected.foreach { e =>
@@ -65,43 +57,48 @@ class GCD extends ModuleInterface("src/hdl/sv/GCD.sv") {
     res
   }
 
-  def calc(gcd: GCD, nums: (BigInt, BigInt))(using Sim, Async): BigInt = {
-    transact(gcd, nums._1, None)
-    transact(gcd, nums._2, Some(model(nums)))
+  def calc(nums: (BigInt, BigInt))(using Sim, Async): BigInt = {
+    transact(nums._1, None)
+    transact(nums._2, Some(model(nums)))
   }
 
   def model(nums: (BigInt, BigInt)): BigInt = {
     nums._1.gcd(nums._2)
   }
 
-  Simulation(GCD(), 1.ns) { gcd =>
-
-    fork {
-      while(true) {
-        printState(gcd)
-        gcd.clock.step()
-      }
-    }
-
+  def reset()(using Sim, Async): Unit = {
     gcd.reset.assert()
     gcd.req.poke(false)
     gcd.loadVal.poke(0)
-
     gcd.clock.step()
-
     gcd.reset.deassert()
-
     gcd.clock.step()
-
-    // throw new Exception("Not implemented")
-
-    val large = BigInt("6789ABCDEF1", 16) -> BigInt("56789ABCDEF12", 16)
-    val small = BigInt(12) -> BigInt(3)
-
-    val res = calc(gcd, small)
-
-    println(s"Result: ${res}")
-
   }
 
+  def step(n: Int = 1)(using Sim, Async): Unit = {
+    gcd.clock.step(n)
+
+  }
 }
+
+@main def GcdSim(): Unit =
+  Simulation(new GCD, 1.ns, Some("gcd.vcd")) { gcd =>
+    val bfm = GcdBfm(gcd)
+
+    fork {
+      while (true) {
+        bfm.printState()
+        bfm.step()
+      }
+    }
+
+    val tests = Seq(
+      BigInt(12) -> BigInt(3),
+      BigInt("6789AC", 16) -> BigInt("56789A", 16) 
+    )
+    bfm.reset()
+    tests.foreach { test =>
+      val res = bfm.calc(test)
+      println(s"Result: ${res}")
+    }
+  }

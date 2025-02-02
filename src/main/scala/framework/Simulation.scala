@@ -12,6 +12,7 @@ import ModuleInterface.{ClockDomain, Register}
 import scala.collection.mutable
 
 import scala.util.Success
+import scala.reflect.ClassTag
 
 trait Sim {
 
@@ -35,6 +36,8 @@ trait Sim {
   def poke(p: Input[Bits], value: BigInt)(using Async): Unit
   def peek(p: Port[Bits])(using Async): BigInt
 
+  def peekMonitor(p: Input[Bits])(using Async): BigInt
+
   def peekReg(r: Register)(using Async): BigInt
 
   def step(c: ClockPort, steps: Int)(using Async): Unit
@@ -48,11 +51,12 @@ trait Sim {
   def abort(e: Throwable)(using Async): Unit
 
   def time: SimulationTime
+
 }
 
 case class ForkContext(c: Option[Component])
 
-def withClock[T](c: ClockPort)(block: (Sim, Async) ?=> T)(using Sim, Async) = {
+def withClockDomain[T](c: ClockPort)(block: (Sim, Async) ?=> T)(using Sim, Async) = {
     val s = summon[Sim]
     
     val newS = s.withClock(c)
@@ -60,11 +64,11 @@ def withClock[T](c: ClockPort)(block: (Sim, Async) ?=> T)(using Sim, Async) = {
     block(using newS, summon[Async])
 }
 
-def stepDomain(steps: Int)(using Sim, Async) = {
+def stepClockDomain(steps: Int)(using Sim, Async) = {
     summon[Sim].step(steps)
 }
 
-class Fork[T](name: String, block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Spawn) {
+class Fork[T](name: String, block: (Sim, Async.Spawn) ?=> T, group: Seq[Fork[?]])(using Sim, Async.Spawn) {
 
     val s = summon[Sim]
     val a = summon[Async.Spawn]
@@ -93,23 +97,36 @@ class Fork[T](name: String, block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Sp
 
     def join(): Unit = {
       s.join(vThread.get)
+      group.foreach(_.join())
+    }
+
+    def fork[T](block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Spawn): Fork[T] = {
+      val s = summon[Sim]
+      val name = s.hierarchicalThreadName + "." + s.getChildThreads.size
+      Fork(name, block, Seq(this) ++ group)
     }
 
   }
 
 object Simulation {
 
-  def apply[M <: ModuleInterface](m: M, timeUnit: Time, debug: Boolean = false)(
+  def apply[M <: ModuleInterface](m: M, timeUnit: Time, wave: Option[String] = None, debug: Boolean = false)(
       block: (Sim, Async.Spawn) ?=> M => Unit
   ): Unit = Async.blocking {
-    val ctrl = new SimulationController(SyncChannel(), m, timeUnit, debug)
+    val ctrl = new SimulationController(SyncChannel(), m, timeUnit, debug, wave)
     val sim = new Simulation(ctrl, SyncChannel(), "root", m.domains.head.clock)
     given Sim = sim
     given ForkContext = ForkContext(None)
     val controller = Future(ctrl.run())
     Future {
       sim.registerCurrentThread()
-      block(m)
+      try {
+        block(m)
+      } catch {
+        case e: Throwable =>
+          sim.logger.error("sim", s"Test failed: $e")
+          sim.abort(e)
+      }
       sim.finish()
     }
     controller.awaitResult
@@ -121,13 +138,13 @@ object Simulation {
   def fork[T](block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Spawn): Fork[T] = {
     val s = summon[Sim]
     val name = s.hierarchicalThreadName + "." + s.getChildThreads.size
-    Fork(name, block)
+    Fork(name, block, Seq.empty)
   }
 
   def forkComp[T](c: Component, phase: String, block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Spawn): Fork[T] = {
     val s = summon[Sim]
-    val name = s.hierarchicalThreadName + "." + s.getChildThreads.size + s"(${c.name}_$phase)"
-    Fork(name, block)
+    val name = s.hierarchicalThreadName + "." + s.getChildThreads.size + s"(${c.name} in $phase)"
+    Fork(name, block, Seq.empty)
   }
 
 }
@@ -168,6 +185,15 @@ class Simulation(
 
   def peek(p: Port[Bits])(using Async): BigInt = {
     ctrl.sendCommand(Peek(Thread.currentThread, p))
+    val r = response.read() match {
+      case Right(Peeked(value)) => value
+      case _ => throw new RuntimeException("Unexpected response")
+    }
+    r
+  }
+
+  def peekMonitor(p: Input[Bits])(using Async): BigInt = {
+    ctrl.sendCommand(PeekMonitor(Thread.currentThread, p))
     val r = response.read() match {
       case Right(Peeked(value)) => value
       case _ => throw new RuntimeException("Unexpected response")
@@ -221,12 +247,10 @@ object SimulationController {
 
     case Poke(t: Thread, p: Input[Bits], value: BigInt) extends Command(t)
     case Peek(t: Thread, p: Port[Bits]) extends Command(t)
+    case PeekMonitor(t: Thread, p: Input[Bits]) extends Command(t)
     case Step(t: Thread, c: ClockPort, steps: Int) extends Command(t)
 
     case PeekReg(t: Thread, r: Register) extends Command(t)
-
-    case MarkSleeping(t: Thread) extends Command(t)
-    case MarkRunning(t: Thread) extends Command(t)
 
     case SendToChannel[T](t: Thread, ch: framework.Channel[T]) extends Command(t)
     case WaitForChannel[T](t: Thread, ch: framework.Channel[T]) extends Command(t)
@@ -251,6 +275,7 @@ object SimulationController {
     case BlockedRead
     case SelfBlocked
     case JoinBlocked(t: String)
+    case WaitForMonitorRegion
   }
 
 }
@@ -259,7 +284,8 @@ class SimulationController(
     commands: SyncChannel[SimulationController.Command],
     val dut: ModuleInterface,
     timeUnit: Time,
-    debug: Boolean
+    debug: Boolean,
+    wave: Option[String]
 ) {
 
   import SimulationController.*
@@ -295,7 +321,7 @@ class SimulationController(
     VerilatorInterface(
       so,
       dut,
-      "wave/" + dut.name + ".vcd",
+      wave.getOrElse(null),
       timeUnit
     )
 
@@ -329,6 +355,8 @@ class SimulationController(
     uncommitedPortState(p) = false
   }
 
+  val latePeeks = mutable.ListBuffer[(Thread, Port[Bits])]()
+
   val inputDriveSkew = dut.inputs.map { p =>
     p -> 0.fs
   }.toMap
@@ -350,6 +378,9 @@ class SimulationController(
         //logger.info("ctrl", s"Handling command $c")
         handleCommand(c)
     }
+
+    var monitorRegion = false
+
     while (true) {
 
       if (finish) {
@@ -371,9 +402,50 @@ class SimulationController(
       logger.info("ctrl", s"""Threads:
                     |  - ${threadStatus.map((t, s) => s"${names(t)}($s) [$t]").mkString("\n  - ")} """.stripMargin)
 
-      
-      if (threadStatus.forall(_._2 != ThreadStatus.Running)) {
+
+      // if some are running -> handle their commands
+      // if all are sleeping but latePeeks is not empty -> peek late
+      // if all are sleeping -> advance time
+
+      if (threadStatus.exists(_._2 == ThreadStatus.Running)) {
+
+        logger.info("ctrl", "Waiting for command")
+        commands.read() match {
+          case Left(_) => logger.error("ctrl", "Unexpected command")
+          case Right(c) =>
+            logger.info("ctrl", s"Received command $c")
+            if (monitorRegion) {
+              c match {
+                case Poke(t, p, value) => throw new Exception("Poke should not be received when threads are running")
+                case _ => ()
+              }
+            }
+            
+            handleCommand(c)
+        }
+
+      } else if (latePeeks.nonEmpty) {
+
+        if (!monitorRegion) {
+          monitorRegion = true
+          logger.info("ctrl", "entering monitor region")
+        }
+        
+
+        logger.info("ctrl", "Peeking late")
+        latePeeks.foreach { case (t, p) =>
+          logger.info("ctrl", s"Peeking $p for ${names(t)}")
+          respond(t).send(Peeked(model.peekInput(dut.portToId(p))))
+          threadStatus(t) = ThreadStatus.Running
+        }
+        latePeeks.clear()
+
+      } else {
+        
         logger.info("ctrl", "All threads sleeping")
+
+        monitorRegion = false
+        logger.info("ctrl", "Exiting monitor region")
 
         val nextTime = queue.nextInteractionTime
 
@@ -397,17 +469,6 @@ class SimulationController(
         interactions.foreach { i =>
           logger.info("ctrl", s"Handling interaction $i")
           handleInteraction(i)
-        }
-
-      } else {
-        
-
-        logger.info("ctrl", "Waiting for command")
-        commands.read() match {
-          case Left(_) => logger.error("ctrl", "Unexpected command")
-          case Right(c) =>
-            logger.info("ctrl", s"Received command $c")
-            handleCommand(c)
         }
 
       }
@@ -484,6 +545,11 @@ class SimulationController(
       logger.info("cmd", s"Thread ${names(t)} peeked $p = $v")
       respond(t).send(Peeked(v))
 
+    case PeekMonitor(t, p) =>
+      latePeeks.addOne(t -> p)
+      logger.info("cmd", s"Thread ${names(t)} want to peek $p after everyone is done")
+      threadStatus(t) = ThreadStatus.WaitForMonitorRegion
+
     case PeekReg(t, r) =>
       val v = model.peekRegister(dut.regToId(r), r.w.toInt)
       logger.info("cmd", s"Thread ${names(t)} peeked register $r = $v")
@@ -495,19 +561,12 @@ class SimulationController(
       threadStatus(t) = ThreadStatus.WaitForStep
       logger.info("cmd", s"Thread ${names(t)} want to step $c by $steps (wake up at $wakeup)")
 
-    case MarkSleeping(t) =>
-      threadStatus(t) = ThreadStatus.SelfBlocked
-      logger.info("cmd", s"Marked thread ${names(t)} as sleeping")
-
-    case MarkRunning(t) =>
-      threadStatus(t) = ThreadStatus.Running
-      logger.info("cmd", s"Marked thread ${names(t)} as running")
-
     case SendToChannel(t, ch) =>
       logger.info("cmd", s"Thread ${names(t)} sent to channel")
       if (reads.contains(ch)) {
-        logger.info("cmd", s"Channel has already someone waiting")
+        
         val r = reads(ch)
+        logger.info("cmd", s"Channel has already ${names(r)} someone waiting")
         reads.remove(ch)
         threadStatus(r) = ThreadStatus.Running
       } else {

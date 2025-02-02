@@ -2,6 +2,7 @@ package framework
 
 
 import gears.async.*
+import scala.concurrent.ExecutionContext
 
 package object types {
 
@@ -43,6 +44,11 @@ package object types {
       summon[PeekHandler[T,V]].peek(p)
     }
   }
+  extension [T <: Data](p: Input[T]) {
+    def peekMonitor[V](using PeekHandler[T, V], Sim, Async): V = {
+      summon[PeekHandler[T,V]].peekMonitor(p)
+    }
+  }
 
   extension [T <: Data](p: Output[T]) {
     inline def expect[V](value: V)(using PeekHandler[T,V], Sim, Async): Unit = {
@@ -68,10 +74,14 @@ package object types {
     def step(steps: Int = 1)(using Sim, Async): Unit = {
       summon[Sim].step(p, steps)
     }
-    def stepUntil(pred: => Boolean)(using Sim, Async): Unit = {
+    def stepUntil(pred: => Boolean)(using Sim, Async): Int = {
+      var cnt = 0
       while (!pred) {
         summon[Sim].step(p, 1)
+        cnt += 1
+        if cnt > 1000 then throw new Exception(s"${summon[Sim].hierarchicalThreadName} timeout on clock $p")
       }
+      cnt
     }
   }
 
