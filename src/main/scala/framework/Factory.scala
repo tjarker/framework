@@ -1,128 +1,106 @@
 package framework
 
-import scala.collection.mutable
-
 import scala.reflect.ClassTag
 
-trait Hierarchy {
-  def setTypeOverride(c: ClassTag[?], overrideTag: ClassTag[?]): Unit
-  def tryGetTypeOverride(c: ClassTag[?]): Option[ClassTag[?]]
-  def getOverrides: Map[ClassTag[?], ClassTag[?]]
-  def setConfig(key: Any, value: Any): Unit
-  def getConfig(key: Any): Option[Any]
-  def getConfigs: Map[Any, Any]
-  def parent: Hierarchy
-  def setComponent(c: Component): Unit
-  def getComponent: Option[Component]
-  def name: String
-  def copy(): Hierarchy
+
+class FactoryImpl {
+
+  protected val contextParams = scala.collection.mutable.Map[Any, Any]()
+  protected val contextOverrides = scala.collection.mutable.Map[ClassTag[?], ClassTag[?]]()
 
 
-  def setConfigOverride(c: ClassTag[?], overrideTag: ClassTag[?]): Unit
-  def tryGetConfigOverride(c: ClassTag[?]): Option[ClassTag[?]]
-}
+  private inline def create[T: ClassTag](
+      name: String,
+      params: Map[Any, Any],
+      overrides: Map[ClassTag[?], ClassTag[?]]
+  )(using Hierarchy): T = {
+    HasHierarchyConstructor.checkHierarchyConstructor[T]
 
-type OverrideMap = mutable.Map[ClassTag[?], ClassTag[?]]
-type ConfigMap = mutable.Map[Any, Any]
+    val h = setupEnvironment(summon[Hierarchy], name, params ++ contextParams.toMap, overrides ++ contextOverrides.toMap)
+    val classTag = getClassTag[T]
+    val obj = classTag.runtimeClass
+      .getDeclaredConstructor(classOf[Hierarchy])
+      .newInstance(h)
+      .asInstanceOf[T]
 
-class ComponentHierarchy(
-    val name: String,
-    val parent: Hierarchy
-) extends Hierarchy {
+    obj match
+      case c: Component => summon[Hierarchy].getComponent.get.children += c
+      case _ => ()
 
-  val overrides = mutable.Map[ClassTag[?], ClassTag[?]]()
-
-  val configOverrides = mutable.Map[ClassTag[?], ClassTag[?]]()
-  val config = mutable.Map[Any, Any]()
-
-  def setConfigOverride(c: ClassTag[?], overrideTag: ClassTag[?]): Unit = {
-    configOverrides.put(c, overrideTag)
-  }
-
-  def tryGetConfigOverride(c: ClassTag[?]): Option[ClassTag[?]] = {
-
-    if (parent != null) {
-      parent.tryGetConfigOverride(c) match {
-        case Some(value) => return Some(value)
-        case None        => 
-      }
-    }
-
-    configOverrides.get(c)
-  }
-
-  var component: Option[Component] = None
-
-  def setComponent(c: Component): Unit = {
-    component = Some(c)
-  }
-
-  def getComponent: Option[Component] = {
-    component
-  }
-
-  def setTypeOverride(c: ClassTag[?], overrideTag: ClassTag[?]): Unit = {
-    overrides.put(c, overrideTag)
-  }
-
-  def tryGetTypeOverride(c: ClassTag[?]): Option[ClassTag[?]] = {
-
-    if (parent != null) {
-      parent.tryGetTypeOverride(c) match {
-        case Some(value) => return Some(value)
-        case None        => 
-      }
-    }
-
-    overrides.get(c)
-  }
-
-  def setConfig(key: Any, value: Any): Unit = {
-    config.put(key, value)
-  }
-
-  def getConfig(key: Any): Option[Any] = {
+    obj
     
-    if (parent != null) {
-      parent.getConfig(key) match {
-        case Some(value) => return Some(value)
-        case None        => 
-      }
-    }
-
-    config.get(key)
-
   }
 
-  def getConfigs: Map[Any, Any] = {
-    if (parent != null) {
-      val map = mutable.Map[Any, Any]()
-      map ++= config
-      parent.getConfigs.foreach(kv => map.put(kv._1, kv._2))
-      map.toMap
-    } else {
-      config.toMap
-    }
+  inline def create[T: ClassTag](name: String, params: (Any,Any)*)(using Hierarchy): T = {
+    create[T](name, Map.empty, Map.empty)
   }
 
-  def getOverrides: Map[ClassTag[?], ClassTag[?]] = {
-    if (parent != null) {
-      val map = mutable.Map[ClassTag[?], ClassTag[?]]()
-      map ++= overrides
-      parent.getOverrides.foreach(kv => map.put(kv._1, kv._2))
-      map.toMap
-    } else {
-      overrides.toMap
-    }
+  inline def create[T: ClassTag](using Hierarchy): T = {
+    create[T](macros.Naming.enclosingTermName)
   }
 
-  def copy(): Hierarchy = {
-    val h = new ComponentHierarchy(name, parent)
-    h.overrides ++= overrides
-    h.config ++= config
-    h.setComponent(component.getOrElse(throw new Exception("Component not set in hierarchy.")))
-    h
+  inline def create[T: ClassTag](params: (Any, Any)*)(using Hierarchy): T = {
+    create[T](macros.Naming.enclosingTermName, params.toMap, Map.empty)
+  }
+  
+  def setupEnvironment(
+      old: Hierarchy,
+      name: String,
+      params: Map[Any, Any],
+      overrides: Map[ClassTag[?], ClassTag[?]]
+  ): Hierarchy = {
+    val newParentHierarchy = old.copy()
+
+    params.foreach(kv => newParentHierarchy.setConfig(kv._1, kv._2))
+    overrides.foreach(kv => newParentHierarchy.setTypeOverride(kv._1, kv._2))
+
+    ComponentHierarchy(name, newParentHierarchy)
+  }
+
+  def getClassTag[T: ClassTag](using Hierarchy): ClassTag[T] = {
+    summon[Hierarchy]
+      .tryGetTypeOverride(summon[ClassTag[T]])
+      .getOrElse(summon[ClassTag[T]])
+      .asInstanceOf[ClassTag[T]]
+  }
+}
+
+class FactoryBuilder extends FactoryImpl {
+
+  inline def withParams(params: (Any, Any)*): FactoryBuilder = {
+    contextParams ++= params
+    this
+  }
+
+  inline def withTypeOverride[T: ClassTag, U <: T: ClassTag]: FactoryBuilder = {
+    HasHierarchyConstructor.checkHierarchyConstructor[T]
+    HasHierarchyConstructor.checkHierarchyConstructor[U]
+    contextOverrides += summon[ClassTag[T]] -> summon[ClassTag[U]]
+    this
+  }
+
+  inline def withConfigOverride[T: ClassTag, U <: T: ClassTag]: FactoryBuilder = {
+    HasEmptyConstructor.checkConstructor[T]
+    HasEmptyConstructor.checkConstructor[U]
+    contextOverrides += summon[ClassTag[T]] -> summon[ClassTag[U]]
+    this
   }
 
 }
+
+object Factory extends FactoryImpl {
+
+  inline def overrideType[T: ClassTag, U <: T: ClassTag](using Hierarchy): Unit = {
+    HasHierarchyConstructor.checkHierarchyConstructor[T]
+    HasHierarchyConstructor.checkHierarchyConstructor[U]
+    summon[Hierarchy].setTypeOverride(summon[ClassTag[T]], summon[ClassTag[U]])
+  }
+
+  def builder: FactoryBuilder = new FactoryBuilder
+
+  
+
+}
+
+
 

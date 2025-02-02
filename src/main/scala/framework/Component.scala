@@ -13,43 +13,7 @@ import Result.*
 import java.lang.reflect.Modifier
 import framework.macros.Naming
 
-class CompBuilder {
-
-  val params = mutable.Map[Any, Any]()
-  val overrides = mutable.Map[ClassTag[?], ClassTag[?]]()
-
-  def withConfig(kv: (Any, Any)*): CompBuilder = {
-    params.addAll(kv)
-    this
-  }
-
-  def withOverride[T <: Component: ClassTag, U <: T: ClassTag]: CompBuilder = {
-    overrides.put(summon[ClassTag[T]], summon[ClassTag[U]])
-    this
-  }
-
-  inline def create[T <: Component: ClassTag](using Hierarchy): T = {
-    create[T](Naming.enclosingTermName)
-  }
-
-  def create[T <: Component: ClassTag](name: String)(using Hierarchy): T = {
-    val h = summon[Hierarchy]
-    val newParentHierarchy = h.copy()
-
-    params.foreach(kv => newParentHierarchy.setConfig(kv._1, kv._2))
-    overrides.foreach(kv => newParentHierarchy.setTypeOverride(kv._1, kv._2))
-
-    {
-      given Hierarchy = newParentHierarchy
-      Comp.create[T](name)
-    }
-  }
-
-}
-
 object Comp {
-
-  def builder(using Hierarchy): CompBuilder = new CompBuilder
 
   def root[C <: Component: ClassTag](c: Hierarchy ?=> C): C = {
 
@@ -73,10 +37,7 @@ object Comp {
   ): T = {
 
     val h = summon[Hierarchy]
-    val newHierarchy = ComponentHierarchy(name, h)
-
-    params.foreach(kv => newHierarchy.setConfig(kv._1, kv._2))
-    overrides.foreach(kv => newHierarchy.setTypeOverride(kv._1, kv._2))
+    val newHierarchy = Factory.setupEnvironment(summon[Hierarchy], name, params, overrides)
 
     val newComponent = c(using newHierarchy)
 
@@ -95,54 +56,6 @@ object Comp {
       Hierarchy
   ): T = {
     apply(Naming.enclosingTermName, c)
-  }
-
-  def overrideType[T <: Component: ClassTag, U <: T: ClassTag](using
-      Hierarchy
-  ): Unit = {
-    summon[Hierarchy].setTypeOverride(summon[ClassTag[T]], summon[ClassTag[U]])
-  }
-
-  def create[T <: Component: ClassTag](
-      name: String,
-      params: Map[Any, Any],
-      overrides: Map[ClassTag[?], ClassTag[?]]
-  )(using
-      Hierarchy
-  ): T = {
-
-    val h = summon[Hierarchy]
-    val classTag =
-      h.tryGetTypeOverride(summon[ClassTag[T]]).getOrElse(summon[ClassTag[T]])
-
-    val c = Comp(
-      name,
-      {
-        val i = classTag.runtimeClass
-          .getConstructor(classOf[Hierarchy])
-
-        println(s"got constructor $i")
-          
-        val c = i.newInstance(summon[Hierarchy])
-
-        println(s"Creating $name with ${i.getClass.getSimpleName()}")
-        c.asInstanceOf[T]
-        
-      },
-      params,
-      overrides
-    )
-
-    println(s"Created $name")
-    c
-  }
-
-  def create[T <: Component: ClassTag](name: String)(using Hierarchy): T = {
-    create[T](name, Map.empty, Map.empty)
-  }
-
-  inline def create[T <: Component: ClassTag](using Hierarchy): T = {
-    create[T](Naming.enclosingTermName)
   }
 
   
@@ -192,10 +105,7 @@ trait Component(using Hierarchy) extends Reportable {
       s"${hierarchy.parent.getComponent.get.toString()}.${hierarchy.name}"
     else hierarchy.name
 
-  def param[T: ClassTag](key: Any): T = Config
-    .tryGet(key)
-    .getOrElse(throw new Exception(s"Component $name expects parameter $key"))
-    .asInstanceOf[T]
+
 }
 
 

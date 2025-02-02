@@ -55,19 +55,19 @@ object TinyAlu {
   }
 
   object AluRequest {
-    def randomize(): AluRequest = {
-      val a = BigInt(8, scala.util.Random)
-      val b = BigInt(8, scala.util.Random)
-      val op = Op.values.oneOf
+    inline def random(): AluRequest = {
+      val a = Rand.uint(8.W)
+      val b = Rand.uint(8.W)
+      val op = Rand.oneof(Op.values)
       AluRequest(op, a, b)
     }
   }
   class AluRequest(val op: Op, val a: BigInt, val b: BigInt)
       extends Transaction {
     def randomize(): AluRequest = {
-      val a = BigInt(8, scala.util.Random)
-      val b = BigInt(8, scala.util.Random)
-      val op = Op.values.oneOf
+      val a = Rand.uint(8.W)
+      val b = Rand.uint(8.W)
+      val op = Rand.oneof(Op.values)
       AluRequest(op, a, b)
     }
 
@@ -146,7 +146,7 @@ class AluDriver(using Hierarchy)
     extends Driver[AluRequest, AluResult],
       SimulationPhase {
 
-  val dut = param[TinyAlu]("dut")
+  val dut = param[TinyAlu]
   val bfm = TinyAluBfm(dut)
   def sim()(using Sim, Async.Spawn) = foreachTx { t =>
     info(s"Sending request: $t")
@@ -160,7 +160,7 @@ class AluDriver(using Hierarchy)
 
 class AluMonitor(using Hierarchy) extends Monitor[AluResult], SimulationPhase {
 
-  val dut = param[TinyAlu]("dut")
+  val dut = param[TinyAlu]
   val bfm = TinyAluBfm(dut)
 
   def sim()(using Sim, Async.Spawn) = forever {
@@ -170,12 +170,6 @@ class AluMonitor(using Hierarchy) extends Monitor[AluResult], SimulationPhase {
     }
 
   
-}
-
-class AluAgent(using Hierarchy) extends Component {
-
-  
-
 }
 
 class AluScoreboard(using Hierarchy)
@@ -209,6 +203,7 @@ class AluScoreboard(using Hierarchy)
 
 }
 
+
 class AluCoverage(using Hierarchy) extends AnalysisComponent[AluResult] {
 
   val ops = mutable.Map[TinyAlu.Op, Int](TinyAlu.Op.values.map(_ -> 0)*)
@@ -230,21 +225,21 @@ class AluCoverage(using Hierarchy) extends AnalysisComponent[AluResult] {
 
 class AluEnv(using Hierarchy) extends Component {
 
-  val driver = Comp.create[AluDriver]
-  val seq = Comp.create[Sequencer[AluRequest, AluResult]]
+  val driver = Factory.create[AluDriver]
+  val seq = Factory.create[Sequencer[AluRequest, AluResult]]
 
-  val monitor = Comp.create[AluMonitor]
-  val scoreboard = Comp.create[AluScoreboard]
-  val coverage = Comp.create[AluCoverage]
+  val monitor = Factory.create[AluMonitor]
+  val scoreboard = Factory.create[AluScoreboard]
+  val coverage = Factory.create[AluCoverage]
 
   driver.port.connect(seq.port)
   monitor.addListeners(scoreboard, coverage)
 }
 
-class RandomSeq(using Sim, Async.Spawn)
+class RandomSeq(using Hierarchy)
     extends Sequence[AluRequest, AluResult] {
 
-  protected def body(): Unit = {
+  protected def body()(using Sim, Async.Spawn): Unit = {
     for (op <- TinyAlu.Op.values) {
       val a = BigInt(8, scala.util.Random)
       val b = BigInt(8, scala.util.Random)
@@ -253,27 +248,27 @@ class RandomSeq(using Sim, Async.Spawn)
   }
 }
 
-class MaxSeq(using Sim, Async.Spawn) extends Sequence[AluRequest, AluResult] {
+class MaxSeq(using Hierarchy) extends Sequence[AluRequest, AluResult] {
 
-  protected def body(): Unit = {
+  protected def body()(using Sim, Async.Spawn): Unit = {
     for (op <- TinyAlu.Op.values) {
       yieldTx(AluRequest(op, 0xFF, 0xFF))
     }
   }
 }
 
-class ManualSeq(op: TinyAlu.Op, a: BigInt, b: BigInt)(using Sim, Async.Spawn)
+class ManualSeq(op: TinyAlu.Op, a: BigInt, b: BigInt)(using Hierarchy)
     extends Sequence[AluRequest, AluResult] {
 
-  protected def body(): Unit = {
+  protected def body()(using Sim, Async.Spawn): Unit = {
     yieldTx(AluRequest(op, a, b))
   }
 }
 
-class FibonacciSeq(using Sim, Async.Spawn)
+class FibonacciSeq(using Hierarchy)
     extends Sequence[AluRequest, AluResult] {
 
-  protected def body(): Unit = {
+  protected def body()(using Sim, Async.Spawn): Unit = {
     var a = 0
     var b = 1
     for (i <- 0 until 10) {
@@ -285,27 +280,36 @@ class FibonacciSeq(using Sim, Async.Spawn)
   }
 }
 
-class TestAllSeq(using Sim, Async.Spawn)
+class TestAllSeq(using Hierarchy)
     extends Sequence[AluRequest, AluResult] {
 
-  protected def body(): Unit = {
-    yieldSeq(RandomSeq())
-    yieldSeq(MaxSeq())
-    yieldSeq(FibonacciSeq())
+  protected def body()(using Sim, Async.Spawn): Unit = {
+    val rand = Factory.create[RandomSeq]
+    val max = Factory.create[MaxSeq]
+    val fib = Factory.create[FibonacciSeq]
+    rand.start()
+    max.start()
+    fib.start()
+    yieldSeq(rand)
+    yieldSeq(max)
+    yieldSeq(fib)
   }
 }
 
-class TestAllSeqParallel(using Sim, Async.Spawn)
+class TestAllSeqParallel(using Hierarchy)
     extends Sequence[AluRequest, AluResult] {
 
-  protected def body(): Unit = {
-    fork {
-      yieldSeq(RandomSeq())
-    }.fork {
-      yieldSeq(MaxSeq())
-    }.fork {
-      yieldSeq(FibonacciSeq())
-    }.join()
+  protected def body()(using Sim, Async.Spawn): Unit = {
+    val rand = Factory.create[RandomSeq]
+    val max = Factory.create[MaxSeq]
+    val fib = Factory.create[FibonacciSeq]
+    rand.start()
+    max.start()
+    fib.start()
+    
+    val mix = SequenceComposition.Mix(rand, max, fib)
+    mix.start()
+    yieldSeq(mix)
   }
 }
 
@@ -323,10 +327,12 @@ class AluTest(dut: TinyAlu)(using Hierarchy) extends Test, ResetPhase {
 
   Config.set("dut", dut)
 
-  //Config.overrideConfig[AluTestConfig, AluTestConfigNoErr]
-
   val bfm = TinyAluBfm(dut)
-  val env = Comp.create[AluEnv]
+  val env = Factory.builder
+    .withParams("hello" -> "world")
+    .withConfigOverride[AluTestConfig, AluTestConfigNoErr]
+    .withTypeOverride[AluDriver, AluDriver]
+    .create[AluEnv]
 
   def reset()(using Sim, Async.Spawn) = {
     bfm.reset()
@@ -337,6 +343,7 @@ class AluTest(dut: TinyAlu)(using Hierarchy) extends Test, ResetPhase {
   def test()(using Sim, Async.Spawn) = {
     util.Random.setSeed(42)
     val seq = sequence()
+    seq.start()
     env.seq.play(seq)
     seq.waitUntilDone()
   }
@@ -348,8 +355,18 @@ class FibonacciTest(dut: TinyAlu)(using Hierarchy) extends AluTest(dut) {
 
 }
 
+class ParallelTest(dut: TinyAlu)(using Hierarchy) extends AluTest(dut) {
+
+  override def sequence()(using Sim, Async.Spawn) = TestAllSeqParallel()
+
+}
+
 @main def AluTestRandom(): Unit =
   Test.run(new TinyAlu, 1.ps, Some("alu_rand.vcd"))(new AluTest(_))
 
 @main def AluTestFibonacci(): Unit =
   Test.run(new TinyAlu, 1.ps, Some("alu_fib.vcd"))(new FibonacciTest(_))
+
+
+@main def AluTestParallel(): Unit =
+  Test.run(new TinyAlu, 1.ps, Some("alu_parallel.vcd"))(new ParallelTest(_))

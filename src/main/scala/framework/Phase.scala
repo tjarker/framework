@@ -23,7 +23,7 @@ object Phase {
 
     val fs = mutable.ListBuffer[(Component, Fork[?])]()
     inner(c, fs)
-    // Logger.info("sim", "Started run phase for components:\n - " + fs.map(_._1.toString()).mkString("\n - "))
+    Logger.info("sim", "Started run phase for components:\n - " + fs.map(_._1.toString()).mkString("\n - "))
   }
 
   def test(c: Component)(using Sim, Async.Spawn): Unit = {
@@ -38,8 +38,9 @@ object Phase {
     }
     val fs = mutable.ListBuffer[(Component, Fork[?])]()
     inner(c, fs)
-    // Logger.info("sim", "Started test phase for components:\n - " + fs.map(_._1.toString()).mkString("\n - "))
+    Logger.info("sim", "Started test phase for components:\n - " + fs.map(_._1.toString()).mkString("\n - "))
     fs.foreach(_._2.join())
+    Logger.warning("sim", "Test phase finished")
   }
 
   def report(c: Component): Unit = {
@@ -61,7 +62,7 @@ object Phase {
     }
     val fs = mutable.ListBuffer[(Component, Fork[?])]()
     inner(c, fs)
-    // Logger.info("sim", "Started reset phase for components:\n - " + fs.map(_._1.toString()).mkString("\n - "))
+    Logger.info("sim", "Started reset phase for components:\n - " + fs.map(_._1.toString()).mkString("\n - "))
     fs.foreach(_._2.join())
   }
 

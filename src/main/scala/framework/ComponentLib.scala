@@ -166,6 +166,8 @@ abstract class Scoreboard[T <: Transaction](using Hierarchy) extends AnalysisCom
   
 }
 
+import scala.reflect.ClassTag
+
 class Sequencer[A <: Transaction, B <: Transaction](using Hierarchy) extends Component
     with SimulationPhase {
 
@@ -175,7 +177,7 @@ class Sequencer[A <: Transaction, B <: Transaction](using Hierarchy) extends Com
 
   def play(s: Sequence[A, B])(using Sim, Async): Unit = seqChan.send(s)
 
-  def play(s: Seq[A])(using Sim, Async.Spawn): Unit = seqChan.send(new Sequence.ScalaSeq(s).asInstanceOf[Sequence[A, B]])
+  def play(s: Seq[A])(using Sim, Async.Spawn): Unit = seqChan.send(new SequenceComposition.ScalaSeq(s).asInstanceOf[Sequence[A, B]])
 
   def sim()(using Sim, Async.Spawn): Unit = {
 

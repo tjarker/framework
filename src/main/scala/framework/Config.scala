@@ -5,12 +5,15 @@ import scala.reflect.ClassTag
 object Config {
 
 
-  def overrideConfig[T: ClassTag, U <: T: ClassTag](using Hierarchy): Unit = {
-    summon[Hierarchy].setConfigOverride(summon[ClassTag[T]], summon[ClassTag[U]])
+  inline def overrideConfig[T: ClassTag, U <: T: ClassTag](using Hierarchy): Unit = {
+    HasEmptyConstructor.checkConstructor[T]
+    HasEmptyConstructor.checkConstructor[U]
+    summon[Hierarchy].setTypeOverride(summon[ClassTag[T]], summon[ClassTag[U]])
   }
 
-  def get[T: ClassTag](using Hierarchy): T = {
-    val tag = summon[Hierarchy].tryGetConfigOverride(summon[ClassTag[T]]).getOrElse(summon[ClassTag[T]])
+  inline def get[T: ClassTag](using Hierarchy): T = {
+    HasEmptyConstructor.checkConstructor[T]
+    val tag = summon[Hierarchy].tryGetTypeOverride(summon[ClassTag[T]]).getOrElse(summon[ClassTag[T]])
 
     tag.runtimeClass.getDeclaredConstructor().newInstance().asInstanceOf[T]
   }

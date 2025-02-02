@@ -26,5 +26,21 @@ package object framework {
             summon[Sim].peekReg(r)
         }
     }
+
+
+    extension [T <: Transaction](s: Seq[T]) {
+        def toSequence(using Hierarchy): Sequence[T, T] = {
+            SequenceComposition.ScalaSeq[T](s).asInstanceOf[Sequence[T, T]]       
+        }
+    }
+
+
+    import scala.reflect.ClassTag
+    inline def param[T: ClassTag](using Hierarchy): T = {
+        Config
+        .tryGet(macros.Naming.enclosingTermName)
+        .getOrElse(throw new Exception(s"Object ${summon[Hierarchy].name} expects parameter ${macros.Naming.enclosingTermName}"))
+        .asInstanceOf[T]
+    }
 }
 

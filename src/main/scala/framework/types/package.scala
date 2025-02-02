@@ -74,13 +74,14 @@ package object types {
     def step(steps: Int = 1)(using Sim, Async): Unit = {
       summon[Sim].step(p, steps)
     }
-    def stepUntil(pred: => Boolean)(using Sim, Async): Unit = {
+    def stepUntil(pred: => Boolean)(using Sim, Async): Int = {
       var cnt = 0
       while (!pred) {
         summon[Sim].step(p, 1)
         cnt += 1
         if cnt > 1000 then throw new Exception(s"${summon[Sim].hierarchicalThreadName} timeout on clock $p")
       }
+      cnt
     }
   }
 

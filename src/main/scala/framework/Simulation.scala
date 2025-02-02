@@ -120,7 +120,13 @@ object Simulation {
     val controller = Future(ctrl.run())
     Future {
       sim.registerCurrentThread()
-      block(m)
+      try {
+        block(m)
+      } catch {
+        case e: Throwable =>
+          sim.logger.error("sim", s"Test failed: $e")
+          sim.abort(e)
+      }
       sim.finish()
     }
     controller.awaitResult

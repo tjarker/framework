@@ -5,23 +5,21 @@ import gears.async.default.given
 
 import scala.collection.mutable
 
+import scala.reflect.ClassTag
+
 import Result.*
 
-abstract class Transaction {
-
-}
 
 abstract class Sequence[A <: Transaction, B <: Transaction](using
-    Sim,
-    Async.Spawn
+    Hierarchy
 ) extends Reportable {
 
   val channel = Channel[Option[A]]()
   val respChannel = Channel[B]()
 
-  protected def body(): Unit
+  protected def body()(using Sim, Async.Spawn): Unit
 
-  protected def yieldTx(t: A): B = {
+  protected def yieldTx(t: A)(using Sim, Async): B = {
     channel.send(Some(t))
     respChannel.read() match {
       case Ok(b)  => b
@@ -29,11 +27,11 @@ abstract class Sequence[A <: Transaction, B <: Transaction](using
     }
   }
 
-  protected def yieldSeq(seq: Sequence[A, B]): Unit = {
+  protected def yieldSeq(seq: Sequence[A, B])(using Sim, Async): Unit = {
     seq.foreach(t => yieldTx(t))
   }
 
-  protected def yieldSeq(seq: Seq[A]): Seq[B] = {
+  protected def yieldSeq(seq: Seq[A])(using Sim, Async): Seq[B] = {
     for (t <- seq) yield yieldTx(t)
   }
 
@@ -63,24 +61,31 @@ abstract class Sequence[A <: Transaction, B <: Transaction](using
     s"Seq(${super.toString()})"
   }
 
-  private val runner = fork {
-    info(s"Starting sequence $this")
-    body()
-    channel.send(None)
+  private var runner: Option[Fork[?]] = None
+
+  def start()(using Sim, Async.Spawn): Unit = {
+    runner = Some(fork {
+      info(s"Starting sequence $this")
+      body()
+      channel.send(None)
+    })
   }
 
   def waitUntilDone()(using Async): Unit = {
-    runner.join()
+    runner match {
+      case Some(r) => r.join()
+      case None    => throw new Exception("Sequence not started")
+    }
   }
 
 }
 
-object Sequence {
+object SequenceComposition {
 
-  class ScalaSeq[A <: Transaction](seq: Seq[A])(using Sim, Async.Spawn)
+  class ScalaSeq[A <: Transaction](seq: Seq[A])(using Hierarchy)
       extends Sequence[A, Transaction] {
 
-    protected def body(): Unit = {
+    protected def body()(using Sim, Async.Spawn): Unit = {
       for (t <- seq) {
         yieldTx(t)
       }
@@ -89,11 +94,10 @@ object Sequence {
   }
 
   class Concat[A <: Transaction, B <: Transaction](seqs: Sequence[A, B]*)(using
-      Sim,
-      Async.Spawn
+      Hierarchy
   ) extends Sequence[A, B] {
 
-    protected def body(): Unit = {
+    protected def body()(using Sim, Async.Spawn): Unit = {
       for (seq <- seqs) {
         yieldSeq(seq)
       }
@@ -104,10 +108,10 @@ object Sequence {
   class Map[A <: Transaction, B <: Transaction, C <: Transaction](
       seq: Sequence[A, C],
       f: A => B
-  )(using Sim, Async.Spawn)
+  )(using Hierarchy)
       extends Sequence[B, C] {
 
-    protected def body(): Unit = {
+    protected def body()(using Sim, Async.Spawn): Unit = {
       seq.foreach { t =>
         yieldTx(f(t))
       }
@@ -116,53 +120,26 @@ object Sequence {
   }
 
   class Mix[A <: Transaction, B <: Transaction](
-      a: Sequence[A, B],
-      b: Sequence[A, B]
-  )(using Sim, Async.Spawn)
+      s: Sequence[A,B]*
+  )(using Hierarchy)
       extends Sequence[A, B] {
 
-    protected def body(): Unit = {
+    protected def body()(using Sim, Async.Spawn): Unit = {
 
-      var toBeFinished = doStuff()
+      val list = mutable.ListBuffer(s*)
 
-      yieldSeq(toBeFinished)
-
-    }
-
-    private def doStuff()(using Sim, Async.Spawn): Sequence[A, B] = {
-      while (true) {
-        if util.Random.nextBoolean() then {
-          a.next() match {
-            case Some(t) => {
-              a.respond(yieldTx(t))
-            }
-            case None => return b
+      while (list.nonEmpty) {
+        val idx = scala.util.Random.nextInt(list.size)
+        val seq = list(idx)
+        seq.next() match {
+          case Some(item) => {
+            seq.respond(yieldTx(item))
           }
-        } else {
-          b.next() match {
-            case Some(t) => {
-              b.respond(yieldTx(t))
-            }
-            case None => return a
-          }
+          case None => list.remove(idx)
         }
       }
-      return a
+
     }
   }
-
-}
-
-
-abstract class Orchestrator(using Sim, Async.Spawn) {
-
-
-  protected def body(): Unit
-
-
-  def run(): Unit = fork {
-    body()
-  }
-
 
 }

@@ -9,7 +9,7 @@ import framework.types.stepUntil
 abstract class ApbBaseDriver(using Hierarchy) extends Driver[ApbTransaction, ApbTransaction] {
 
 
-  val bfm = param[ApbBfm]("bfm")
+  val bfm = param[ApbBfm]
 
   override def sim()(using Sim, Spawn): Unit = {
 
@@ -43,19 +43,17 @@ class ApbProducerDriver(using Hierarchy) extends ApbBaseDriver {
 
     info("Driving pins for producer")
 
+    bfm.clk.step(tx.waitLen)
+    bfm.sel.poke(true)
+    bfm.en.poke(false)
+    bfm.addr.poke(tx.addr)
 
     tx.op match {
       case OpType.Write => {
-        bfm.addr.poke(tx.addr)
-        bfm.en.poke(false)
-        bfm.sel.poke(true)
         bfm.wdata.poke(tx.data)
         bfm.wr.poke(true)
       }
       case OpType.Read => {
-        bfm.addr.poke(tx.addr)
-        bfm.en.poke(false)
-        bfm.sel.poke(true)
         bfm.wr.poke(false)
       }
     }
@@ -63,7 +61,7 @@ class ApbProducerDriver(using Hierarchy) extends ApbBaseDriver {
     bfm.clk.step()
     bfm.en.poke(true)
 
-    bfm.clk.stepUntil(bfm.ready.peek)
+    val cnt = bfm.clk.stepUntil(bfm.ready.peek)
 
     val err = bfm.slverr.peek
     val rdata = bfm.rdata.peek
@@ -78,6 +76,10 @@ class ApbProducerDriver(using Hierarchy) extends ApbBaseDriver {
       case OpType.Read => resp.data = rdata
       case _ => ()
     }
+
+    if cnt < 1 then bfm.clk.step()  
+    bfm.sel.poke(false)
+    bfm.en.poke(false)
 
     resp
   }
