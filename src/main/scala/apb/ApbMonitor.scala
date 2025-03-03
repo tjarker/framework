@@ -21,15 +21,15 @@ class ApbMonitor(using Hierarchy) extends Monitor[ApbTransaction] {
       }
 
       tx.waitLen = waitStates
-      tx.addr = bfm.addr.peek.toInt
+      tx.addr = bfm.addr.peek
       tx.slverr = bfm.slverr.peek
 
       if (bfm.wr.peek) {
         tx.op = OpType.Write
-        tx.data = bfm.wdata.peek.toInt
+        tx.data = bfm.wdata.peek
       } else {
         tx.op = OpType.Read
-        tx.data = bfm.rdata.peek.toInt
+        tx.data = bfm.rdata.peek
       }
 
       bfm.clk.step()

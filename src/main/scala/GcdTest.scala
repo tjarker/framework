@@ -45,7 +45,7 @@ class GcdBfm(gcd: GCD) {
 
     gcd.clock.stepUntil(gcd.ack.peek)
 
-    val res = gcd.result.peek
+    val res = gcd.result.peek[BigInt]
     expected.foreach { e =>
       gcd.result.expect(e)
     }

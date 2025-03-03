@@ -21,4 +21,9 @@ object PeekHandler {
     def peek(p: Port[UInt])(using Sim, Async): BigInt = summon[Sim].peek(p)
     def peekMonitor(p: Input[UInt])(using Sim, Async): BigInt = summon[Sim].peekMonitor(p)
   }
+
+  given PeekHandler[UInt, Int] with {
+    def peek(p: Port[UInt])(using Sim, Async): Int = summon[Sim].peek(p).toInt
+    def peekMonitor(p: Input[UInt])(using Sim, Async): Int = summon[Sim].peekMonitor(p).toInt
+  }
 }

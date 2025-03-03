@@ -46,7 +46,7 @@ abstract class Driver[A <: Transaction, B <: Transaction](using Hierarchy)
   private var drivenCnt = 0
 
   protected def next()(using Sim, Async): A = {
-    info("Waiting for next transaction")
+    //info("Waiting for next transaction")
     port.tx.read() match {
       case Ok(t) => {
         this.synchronized { 

@@ -25,7 +25,7 @@ class FactoryImpl {
 
     obj match
       case c: Component => summon[Hierarchy].getComponent.get.children += c
-      case _ => ()
+      case _ => h.setComponent(summon[Hierarchy].getComponent.getOrElse(throw new Exception("Parent context has component not defined")))
 
     obj
     

@@ -59,7 +59,7 @@ class ApbBfm(
 
     this.clk.stepUntil(this.ready.peek)
 
-    val data = this.rdata.peek
+    val data = this.rdata.peek[BigInt]
     val res = if this.slverr.peek then None else Some(data)
 
     res

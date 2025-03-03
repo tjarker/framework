@@ -64,11 +64,11 @@ abstract class Sequence[A <: Transaction, B <: Transaction](using
   private var runner: Option[Fork[?]] = None
 
   def start()(using Sim, Async.Spawn): Unit = {
-    runner = Some(fork {
-      info(s"Starting sequence $this")
+    runner = Some(forkSeq(s"${summon[Hierarchy].name}: ${this.getClass().getSimpleName()}",{
+      //info(s"Starting sequence $this")
       body()
       channel.send(None)
-    })
+    }))
   }
 
   def waitUntilDone()(using Async): Unit = {

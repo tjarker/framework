@@ -75,6 +75,10 @@ object Comp {
 
 trait Component(using Hierarchy) extends Reportable {
 
+  def overrides(using Hierarchy): Unit = {}
+
+  overrides
+
   val children = mutable.ListBuffer[Component]()
 
   val hierarchy = summon[Hierarchy]

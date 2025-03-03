@@ -5,6 +5,13 @@ object Logger {
   import Console.*
   import macros.FileContext
 
+  def banner(msg: String): String = {
+    val total = 100
+    val left = (total - msg.length) / 2
+    val right = total - msg.length - left
+    s"${YELLOW}${"=" * left}${RESET} $msg ${YELLOW}${"=" * right}${RESET}"
+  }
+
   inline def info(provider: String, msg: String): Unit = Logger.synchronized {
     val lines = msg.split("\n")
     val framed = "\u001b[38;5;11m"

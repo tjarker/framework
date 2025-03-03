@@ -167,7 +167,7 @@ class ComponentHierarchy(
     val h = new ComponentHierarchy(name, parent)
     h.overrides ++= overrides
     h.config ++= config
-    h.setComponent(component.getOrElse(throw new Exception("Component not set in hierarchy.")))
+    h.setComponent(component.getOrElse(throw new Exception(s"Component not set in hierarchy $name ${parent.toString()}.")))
     h
   }
 

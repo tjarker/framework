@@ -64,7 +64,7 @@ class ApbProducerDriver(using Hierarchy) extends ApbBaseDriver {
     val cnt = bfm.clk.stepUntil(bfm.ready.peek)
 
     val err = bfm.slverr.peek
-    val rdata = bfm.rdata.peek
+    val rdata = bfm.rdata.peek[BigInt]
 
     info(s"Got response: $rdata, error: $err")
 
