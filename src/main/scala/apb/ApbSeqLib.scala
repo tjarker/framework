@@ -2,6 +2,7 @@ package apb
 
 import gears.async.*
 import framework.*
+import framework.simulation.{Sim, stepClockDomain}
 
 
 class ApbBaseSeq(using Hierarchy) extends Sequence[ApbTransaction, ApbTransaction] {

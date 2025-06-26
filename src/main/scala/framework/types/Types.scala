@@ -1,10 +1,11 @@
-package framework
+package framework.types
 
 
 import gears.async.*
 import scala.concurrent.ExecutionContext
+import framework.simulation.Sim
 
-package object types {
+object Types {
 
   trait TypeContext {
     def register[T <: Bits](b: T): T

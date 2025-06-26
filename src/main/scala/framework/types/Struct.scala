@@ -2,7 +2,7 @@ package framework.types
 
 import scala.collection.mutable
 
-import framework.types.*
+import Types.*
 
 object Struct {
 

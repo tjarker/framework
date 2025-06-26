@@ -1,6 +1,8 @@
 package framework
 
-import framework.Time.ns
+import simulation.Time
+import simulation.ModuleInterface
+import simulation.Simulation
 
 
 object Test {

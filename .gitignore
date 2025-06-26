@@ -7,3 +7,4 @@
 /**/target/
 /**/project/
 *.vcd
+.DS_Store

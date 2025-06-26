@@ -1,3 +1,4 @@
+import framework.simulation.ModuleInterface
 
 
 
@@ -7,12 +8,29 @@ import gears.async.Async
 
 package object framework {
 
-    export Simulation.{fork, forkComp}
+    export simulation.Simulation.{fork, forkComp}
     export types.PokeHandler.given
     export types.PeekHandler.given
     export Util.*
+    export simulation.Time.*
+    export simulation.Simulation
+    export simulation.Sim
+    export simulation.ModuleInterface
+
+    export framework.types.Types.*
+    export framework.types.Input
+    export framework.types.Output
+    export framework.types.Bool
+    export framework.types.UInt
+    export framework.types.SInt
+    export framework.types.Struct
+    export framework.types.ClockPort
+    export framework.types.ResetPort
+
 
     export gears.async.Async
+
+    import simulation.*
     
     def forever(body: => Unit): Unit = {
         while (true) {

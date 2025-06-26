@@ -1,8 +1,9 @@
-package framework
+package framework.simulation
 
 import com.sun.jna.*
 
 import Time.*
+import framework.Logger
 
 object VerilatorInterface {
 

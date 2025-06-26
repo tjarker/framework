@@ -1,4 +1,6 @@
 package framework
+import simulation.Sim
+import simulation.Time
 
 object Logger {
 

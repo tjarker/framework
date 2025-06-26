@@ -1,7 +1,4 @@
 import framework.*
-import framework.given
-import types.*
-import Time.*
 
 class CDC extends ModuleInterface("src/hdl/sv/CDC.sv") {
 

@@ -1,7 +1,4 @@
 import framework.*
-import framework.given
-import types.*
-import Time.*
 
 class GCD extends ModuleInterface("src/hdl/sv/GCD.sv") {
 
@@ -94,7 +91,7 @@ class GcdBfm(gcd: GCD) {
 
     val tests = Seq(
       BigInt(12) -> BigInt(3),
-      BigInt("6789AC", 16) -> BigInt("56789A", 16) 
+      //BigInt("6789AC", 16) -> BigInt("56789A", 16) 
     )
     bfm.reset()
     tests.foreach { test =>

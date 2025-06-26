@@ -4,6 +4,7 @@ import framework.*
 import framework.types.*
 
 import gears.async.*
+import framework.simulation.Sim
 
 class ApbBfm(
     val clk: ClockPort,

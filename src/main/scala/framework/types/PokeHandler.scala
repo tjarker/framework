@@ -1,7 +1,8 @@
 package framework.types
 
 import framework.Util
-import framework.Sim
+import framework.simulation.Sim
+import Types.*
 
 import gears.async.Async
 

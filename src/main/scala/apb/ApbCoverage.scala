@@ -3,6 +3,7 @@ package apb
 import framework.*
 
 import scala.collection.mutable
+import framework.simulation.Sim
 
 class ApbCoverage(using Hierarchy) extends AnalysisComponent[ApbTransaction] {
 

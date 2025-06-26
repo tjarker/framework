@@ -1,5 +1,7 @@
 package framework.types
 
+import Types.*
+
 class SInt(val width: Width) extends Data {
   override def toString(): String = s"SInt($width)"
 }

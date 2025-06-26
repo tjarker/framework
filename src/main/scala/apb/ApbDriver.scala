@@ -4,7 +4,8 @@ import framework.*
 import gears.async.Async.Spawn
 import gears.async.Async
 import framework.types.*
-import framework.types.stepUntil
+import framework.types.Types.stepUntil
+import framework.simulation.Sim
 
 abstract class ApbBaseDriver(using Hierarchy) extends Driver[ApbTransaction, ApbTransaction] {
 

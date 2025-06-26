@@ -3,6 +3,7 @@ package framework
 import gears.async.Async
 
 import scala.collection.mutable
+import simulation.{Fork, Sim}
 
 
 trait Phase

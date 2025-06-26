@@ -1,7 +1,8 @@
-package framework
+package framework.simulation
 
 import Time.AbsoluteTime
-import types.*
+import framework.types.*
+import Types.*
 
 enum Interaction(val time: AbsoluteTime) {
   case Drive(t: AbsoluteTime, p: Input[Bits], value: BigInt)

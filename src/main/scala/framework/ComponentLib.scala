@@ -1,6 +1,7 @@
 package framework
 
 import Result.*
+import simulation.*
 
 import gears.async.{Async, ChannelMultiplexer}
 
@@ -167,6 +168,7 @@ abstract class Scoreboard[T <: Transaction](using Hierarchy) extends AnalysisCom
 }
 
 import scala.reflect.ClassTag
+import simulation.Sim
 
 class Sequencer[A <: Transaction, B <: Transaction](using Hierarchy) extends Component
     with SimulationPhase {

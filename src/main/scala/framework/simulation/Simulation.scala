@@ -1,18 +1,24 @@
-package framework
+package framework.simulation
 
 import scala.util.DynamicVariable
 
 import gears.async.*
 import gears.async.default.given
 
-import types.*
+import framework.types.*
+import Types.*
 import Time.*
 import ModuleInterface.{ClockDomain, Register}
+import framework.Logger
+
+import framework.Component
 
 import scala.collection.mutable
 
 import scala.util.Success
 import scala.reflect.ClassTag
+
+
 
 trait Sim {
 
@@ -307,8 +313,8 @@ class SimulationController(
 
   Process("make clean_copies all", p.toFile).!!
 
-  val libPath = s"${p.toAbsolutePath}/build/lib${dut.name}.so"
-  val libCopy = s"${p.toAbsolutePath}/build/lib${dut.name}_${java.time.Instant.now().toEpochMilli}.so"
+  val libPath = s"${p.toAbsolutePath}/build/lib${dut.name}${MakefileGenerator.libExtension}"
+  val libCopy = s"${p.toAbsolutePath}/build/lib${dut.name}_${java.time.Instant.now().toEpochMilli}${MakefileGenerator.libExtension}"
   Files.copy(Paths.get(libPath), Paths.get(libCopy))
 
   

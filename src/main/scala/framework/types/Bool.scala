@@ -1,5 +1,7 @@
 package framework.types
 
+import Types.*
+
 class Bool() extends Data {
   val width = 1.W
   override def toString(): String = "Bool"

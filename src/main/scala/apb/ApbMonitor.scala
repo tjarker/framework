@@ -2,6 +2,7 @@ package apb
 
 import framework.*
 import framework.types.*
+import framework.simulation.Sim
 
 class ApbMonitor(using Hierarchy) extends Monitor[ApbTransaction] {
 

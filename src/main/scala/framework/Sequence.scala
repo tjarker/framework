@@ -8,6 +8,7 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import Result.*
+import simulation.{Fork, Sim}
 
 
 abstract class Sequence[A <: Transaction, B <: Transaction](using

@@ -2,7 +2,7 @@ package framework
 
 import scala.util.Random
 
-import framework.types.Width
+import framework.types.Types.Width
 
 object Rand {
 

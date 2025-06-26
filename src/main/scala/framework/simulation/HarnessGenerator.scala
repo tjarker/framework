@@ -1,4 +1,4 @@
-package framework
+package framework.simulation
 
 import java.nio.file.Path
 import java.nio.file.Files
@@ -17,23 +17,39 @@ object MakefileGenerator {
     )
   }
 
-  def makefile(m: ModuleInterface) =
+  def libExtension: String = {
+    if (System.getProperty("os.name").toLowerCase().contains("windows")) {
+      ".dll"
+    } else if (System.getProperty("os.name").toLowerCase().contains("mac")) {
+      ".dylib"
+    } else {
+      ".so"
+    }
+  }
+
+  def makefile(m: ModuleInterface) = {
+    val nproc = Runtime.getRuntime.availableProcessors()
+    val flags = System.getProperty("os.name") match {
+      case os if os.startsWith("Linux") => "-pthread -latomic -lpthread"
+      case _                            => ""
+    }
     s"""
-       |all: build/lib${m.name}.so
+       |all: build/lib${m.name}${libExtension}
        |
        |build/libV${m.name}.a build/sim.o build/libverilated.a build/V${m.name}__ALL.a: ${m.files
         .map(Path.of(_).toAbsolutePath())
         .mkString(" ")} sim.cpp
-       |\tverilator --cc -j $$(shell nproc) --trace --build --Mdir build --top ${m.name} -CFLAGS "-fPIC -fpermissive" ${m.files
+       |\tverilator --cc -j $nproc --trace --build --Mdir build --top ${m.name} -CFLAGS "-fPIC -fpermissive" ${m.files
         .map(Path.of(_).toAbsolutePath())
         .mkString(" ")} sim.cpp
        |
-       |build/lib${m.name}.so: build/libV${m.name}.a build/sim.o build/libverilated.a build/V${m.name}__ALL.a
-       |\tg++ -shared -o $$@ build/libV${m.name}.a build/sim.o build/libverilated.a build/V${m.name}__ALL.a  -pthread -lpthread -latomic
+       |build/lib${m.name}${libExtension}: build/libV${m.name}.a build/sim.o build/libverilated.a build/V${m.name}__ALL.a
+       |\tg++ -shared -o $$@ build/libV${m.name}.a build/sim.o build/libverilated.a build/V${m.name}__ALL.a $flags
        |
        |clean_copies:
        |\trm -rf build/lib${m.name}_*.so
        |""".stripMargin
+  }
 
 }
 
@@ -54,6 +70,8 @@ object HarnessGenerator {
     s"""
       |${includes(name)}
       |${SimContextClass(name)}
+      |
+      |double sc_time_stamp() { return 0; }
       |
       |${functionInterfaces(name)}
       |

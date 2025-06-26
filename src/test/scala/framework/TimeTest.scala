@@ -4,6 +4,7 @@ package framework
 import Time.*
 
 import org.scalatest.flatspec.AnyFlatSpec
+import simulation.Time
 
 class TimeTest extends AnyFlatSpec {
 
