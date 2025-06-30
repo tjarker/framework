@@ -21,11 +21,11 @@ class Generator[T](block: => Any) extends Iterator[T] {
 
   // val ch = new Channel[T]()
 
-  // var done = false
+  var done = false
 
-  // override def next(): T = ch.receive()
+  override def next(): T = ???
 
-  // override def hasNext: Boolean = !done
+  override def hasNext: Boolean = !done
 
   // launch {
   //   Gen.ch.withValue(ch) {

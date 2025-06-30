@@ -35,10 +35,13 @@ object Scheduler {
 
   private val schedulerFactory: () => Scheduler = {
     if (hasContinuations) { () =>
+      println("Using Continuation Scheduler")
       new ContinuationScheduler()
     } else if (hasVirtualThreads) { () =>
+      println("Using Virtual Thread Scheduler")
       new VirtualThreadScheduler()
     } else { () =>
+      println("Using Platform Thread Scheduler")
       new PlatformThreadScheduler()
     }
   }

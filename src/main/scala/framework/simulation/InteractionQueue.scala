@@ -2,13 +2,14 @@ package framework.simulation
 
 import Time.AbsoluteTime
 import _root_.framework.types.*
+import _root_.framework.coop.Task
 
 enum Interaction(val time: AbsoluteTime) {
   case Drive(t: AbsoluteTime, p: Input[Bits], value: BigInt)
       extends Interaction(t)
   case PosEdge(t: AbsoluteTime, p: ClockPort) extends Interaction(t)
   case NegEdge(t: AbsoluteTime, p: ClockPort) extends Interaction(t)
-  case Release(t: AbsoluteTime, thread: Thread) extends Interaction(t)
+  case Release(t: AbsoluteTime, thread: Task[?]) extends Interaction(t)
 }
 
 class InteractionQueue {

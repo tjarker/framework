@@ -5,7 +5,6 @@ import _root_.framework.types.*
 import _root_.framework.ModuleInterface.Register
 import _root_.framework.Logger
 
-
 enum BlockReason {
   case Join(t: Task[?])
   case WaitForStep(c: ClockPort, steps: Int)
@@ -18,12 +17,15 @@ trait SimControl {
 
   def time: SimulationTime
   def dut: ModuleInterface
+  def registerTask(t: Task[?], name: String): Unit
   def markRunning(t: Task[?]): Unit
-  def markSleeping(t: Task[?]): Unit
+  def markSleeping(t: Task[?], reason: BlockReason): Unit
   def retire(t: Task[?]): Unit
   def requestStepWakeup(t: Task[?], c: ClockPort, steps: Int): Unit
   def requestPoke(t: Task[?], p: Input[Bits], value: BigInt): Unit
   def requestPeek(t: Task[?], p: Port[Bits]): BigInt
+  def isInMonitorRegion(): Boolean
+  def requestMonitorWakeup(t: Task[?]): Unit
   def requestPeekMonitor(t: Task[?], p: Input[Bits]): BigInt
   def requestPeekReg(t: Task[?], r: Register): BigInt
   def finish(t: Task[?]): Unit
@@ -43,20 +45,29 @@ trait Sim {
 
   def addChildTask(f: Task[?]): Unit
 
-  def getChildTasks: List[Task[?]]
+  def getChildTasks: Seq[Task[?]]
+
+  def registerTask(t: Task[?], name: String): Unit = ctrl.registerTask(t, name)
 
   def markRunning(t: Task[?]): Unit = ctrl.markRunning(t)
 
-  def markSleeping(t: Task[?]): Unit = ctrl.markSleeping(t)
+  def markSleeping(t: Task[?], reason: BlockReason): Unit = ctrl.markSleeping(t, reason)
 
   def retire(t: Task[?]): Unit = ctrl.retire(t)
 
   def logger: Logger = Logger(true)
 
-  def poke(p: Input[Bits], value: BigInt): Unit = ctrl.requestPoke(Task.current, p, value)
+  def poke(p: Input[Bits], value: BigInt): Unit =
+    ctrl.requestPoke(Task.current, p, value)
   def peek(p: Port[Bits]): BigInt = ctrl.requestPeek(Task.current, p)
 
-  def peekMonitor(p: Input[Bits]): BigInt = ctrl.requestPeekMonitor(Task.current, p)
+  def peekMonitor(p: Input[Bits]): BigInt = {
+    if (!ctrl.isInMonitorRegion()) {
+      ctrl.requestMonitorWakeup(Task.current)
+      Task.suspendCurrent()
+    }
+    ctrl.requestPeekMonitor(Task.current, p)
+  }
 
   def peekReg(r: Register): BigInt = ctrl.requestPeekReg(Task.current, r)
 
@@ -66,8 +77,6 @@ trait Sim {
   }
 
   def step(steps: Int): Unit = step(currentClock, steps)
-
-
 
   def finish(): Unit = ctrl.finish(Task.current)
 

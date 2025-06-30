@@ -6,6 +6,12 @@ scalacOptions := Seq(
     "-language:reflectiveCalls",
 )
 
+fork := true
+javaOptions += "--add-exports=java.base/jdk.internal.vm=ALL-UNNAMED"
+
+
+javacOptions += "--add-exports=java.base/jdk.internal.vm=ALL-UNNAMED"
+
 libraryDependencies += "net.java.dev.jna" % "jna" % "5.14.0"
 
 
