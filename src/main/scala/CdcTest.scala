@@ -39,13 +39,13 @@ class HandshakeSender(
     data: Input[UInt]
 ) {
 
-  def reset()(using Sim, Async): Unit = {
+  def reset()(using Sim): Unit = {
     reset.assert()
     clock.step()
     reset.deassert()
   }
 
-  def send(value: BigInt)(using Sim, Async): Unit = {
+  def send(value: BigInt)(using Sim): Unit = {
     req.poke(true)
     data.poke(value)
     clock.stepUntil(ack.peek)
@@ -63,13 +63,13 @@ class HandshakeReceiver(
     data: Output[UInt]
 ) {
 
-  def reset()(using Sim, Async): Unit = {
+  def reset()(using Sim): Unit = {
     reset.assert()
     clock.step()
     reset.deassert()
   }
 
-  def expect(value: BigInt)(using Sim, Async): Unit = {
+  def expect(value: BigInt)(using Sim): Unit = {
     clock.stepUntil(req.peek)
     data.expect(value)
     ack.poke(true)

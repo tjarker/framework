@@ -1,7 +1,5 @@
 import framework.*
 
-import gears.async.Async
-import gears.async.Async.Spawn
 
 class toplevel(aw: Int = 10, dw: Int = 32)
     extends ModuleInterface(
@@ -65,11 +63,11 @@ class DidacticTest(apb: ApbBfm)(using Hierarchy) extends Test, ResetPhase {
 
   val env = Factory.create[ApbEnv]
 
-  def reset()(using Sim, Async.Spawn) = {
+  def reset()(using Sim) = {
     apb.reset()
   }
 
-  def test()(using Sim, Async.Spawn): Unit = {
+  def test()(using Sim): Unit = {
 
     val seq = Factory.create[ApbBaseSeq]
     seq.start()

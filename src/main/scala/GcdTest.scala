@@ -26,16 +26,13 @@ class GcdBfm(gcd: GCD) {
 
   val states = Seq("wait_a", "ack_a", "wait_b", "compare", "update_a", "update_b", "ack_result")
 
-  def printState()(using Sim, Async): Unit = {
+  def printState()(using Sim): Unit = {
     println(s"@${gcd.time}${"=" * 80}")
     println(s"State: ${states(gcd.state.peekReg.toInt)}")
     println(s"A = ${gcd.a.peekReg} B = ${gcd.b.peekReg}")
   }
 
-  def transact(value: BigInt, expected: Option[BigInt])(using
-      Sim,
-      Async
-  ): BigInt = {
+  def transact(value: BigInt, expected: Option[BigInt])(using Sim): BigInt = {
 
     gcd.loadVal.poke(value)
     gcd.req.poke(true)
@@ -54,7 +51,7 @@ class GcdBfm(gcd: GCD) {
     res
   }
 
-  def calc(nums: (BigInt, BigInt))(using Sim, Async): BigInt = {
+  def calc(nums: (BigInt, BigInt))(using Sim): BigInt = {
     transact(nums._1, None)
     transact(nums._2, Some(model(nums)))
   }
@@ -63,7 +60,7 @@ class GcdBfm(gcd: GCD) {
     nums._1.gcd(nums._2)
   }
 
-  def reset()(using Sim, Async): Unit = {
+  def reset()(using Sim): Unit = {
     gcd.reset.assert()
     gcd.req.poke(false)
     gcd.loadVal.poke(0)
@@ -72,7 +69,7 @@ class GcdBfm(gcd: GCD) {
     gcd.clock.step()
   }
 
-  def step(n: Int = 1)(using Sim, Async): Unit = {
+  def step(n: Int = 1)(using Sim): Unit = {
     gcd.clock.step(n)
 
   }

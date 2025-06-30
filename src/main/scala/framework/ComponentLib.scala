@@ -1,9 +1,7 @@
 package framework
 
-import Result.*
 import simulation.*
-
-import gears.async.{Async, ChannelMultiplexer}
+import Channel.Result.*
 
 import scala.collection.mutable
 
@@ -27,11 +25,11 @@ class SequencerPort[A <: Transaction, B <: Transaction] {
   }
 
 
-  def drive(a: A)(using Sim, Async): B = {
+  def drive(a: A)(using Sim): B = {
     tx.send(a)
     resp.read() match {
       case Ok(b) => b
-      case Err(_) => throw new Exception("No response")
+      case Closed => throw new Exception("No response")
     }
   }
 }
@@ -46,7 +44,7 @@ abstract class Driver[A <: Transaction, B <: Transaction](using Hierarchy)
 
   private var drivenCnt = 0
 
-  protected def next()(using Sim, Async): A = {
+  protected def next()(using Sim): A = {
     info("Waiting for next transaction")
     port.tx.read() match {
       case Ok(t) => {
@@ -62,21 +60,21 @@ abstract class Driver[A <: Transaction, B <: Transaction](using Hierarchy)
         }
         t
       }
-      case Err(_) => throw new Exception("No transaction")
+      case Closed => throw new Exception("No transaction")
     }
   }
 
-  protected def foreachTx(f: A => Unit)(using Sim, Async): Unit = {
+  protected def foreachTx(f: A => Unit)(using Sim): Unit = {
     while (true) {
       f(next())
     }
   }
 
-  protected def respond(b: B)(using Sim, Async): Unit = port.resp.send(b)
+  protected def respond(b: B)(using Sim): Unit = port.resp.send(b)
 
   def numOfDrivenTxs: Int = this.synchronized { drivenCnt }
 
-  def waitForNumOfDrivenTxs(n: Int)(using Sim, Async): Unit = {
+  def waitForNumOfDrivenTxs(n: Int)(using Sim): Unit = {
 
     val chan = Channel[Unit]()
 
@@ -101,7 +99,7 @@ abstract class Monitor[T <: Transaction](using Hierarchy)
 
   val waiting = mutable.ListBuffer[(Channel[Unit], Int)]()
 
-  def publish(t: T)(using Sim, Async): Unit = {
+  def publish(t: T)(using Sim): Unit = {
 
     this.synchronized { 
       observedCnt += 1
@@ -129,7 +127,7 @@ abstract class Monitor[T <: Transaction](using Hierarchy)
 
   def numOfObservedTxs: Int = this.synchronized { observedCnt }
 
-  def waitForNumOfObservedTxs(n: Int)(using Sim, Async): Unit = {
+  def waitForNumOfObservedTxs(n: Int)(using Sim): Unit = {
 
     val chan = Channel[Unit]()
 
@@ -148,14 +146,14 @@ abstract class AnalysisComponent[T <: Transaction](using Hierarchy) extends Comp
 
   val port = ReceiverPort[T]()
 
-  protected def next()(using Sim, Async): T = {
+  protected def next()(using Sim): T = {
     port.read() match {
       case Ok(t) => t
-      case Err(_) => throw new Exception("No transaction")
+      case Closed => throw new Exception("No transaction")
     }
   }
 
-  protected def foreachTx(f: T => Unit)(using Sim, Async): Unit = {
+  protected def foreachTx(f: T => Unit)(using Sim): Unit = {
     while (true) {
       f(next())
     }
@@ -177,22 +175,22 @@ class Sequencer[A <: Transaction, B <: Transaction](using Hierarchy) extends Com
 
   val seqChan = Channel[Sequence[A, B]]()
 
-  def play(s: Sequence[A, B])(using Sim, Async): Unit = seqChan.send(s)
+  def play(s: Sequence[A, B])(using Sim): Unit = seqChan.send(s)
 
-  def play(s: Seq[A])(using Sim, Async.Spawn): Unit = seqChan.send(new SequenceComposition.ScalaSeq(s).asInstanceOf[Sequence[A, B]])
+  def play(s: Seq[A])(using Sim): Unit = seqChan.send(new SequenceComposition.ScalaSeq(s).asInstanceOf[Sequence[A, B]])
 
-  def sim()(using Sim, Async.Spawn): Unit = {
+  def sim()(using Sim): Unit = {
 
     while (true) {
       seqChan.read() match {
         case Ok(s)  => playSeq(s)
-        case Err(_) => throw new Exception("No sequence")
+        case Closed => throw new Exception("No sequence")
       }
     }
 
   }
 
-  def playSeq(s: Sequence[A, B])(using Sim, Async.Spawn): Unit = {
+  def playSeq(s: Sequence[A, B])(using Sim): Unit = {
 
     s.foreach { t =>
       port.drive(t)

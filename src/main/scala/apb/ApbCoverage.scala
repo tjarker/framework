@@ -3,7 +3,6 @@ package apb
 import framework.*
 
 import scala.collection.mutable
-import framework.simulation.Sim
 
 class ApbCoverage(using Hierarchy) extends AnalysisComponent[ApbTransaction] {
 
@@ -19,7 +18,7 @@ class ApbCoverage(using Hierarchy) extends AnalysisComponent[ApbTransaction] {
 
   val delayBeforeTx = mutable.Map[Int, Int]().withDefaultValue(0)
 
-  def sim()(using Sim, Async.Spawn): Unit = {
+  def sim()(using Sim): Unit = {
     foreachTx { tx =>
       op(tx.op) += 1
       addr(tx.addr) += 1

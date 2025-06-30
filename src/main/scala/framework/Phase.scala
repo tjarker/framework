@@ -1,7 +1,5 @@
 package framework
 
-import gears.async.Async
-
 import scala.collection.mutable
 import simulation.{Fork, Sim}
 
@@ -10,7 +8,7 @@ trait Phase
 
 object Phase {
 
-  def run(c: Component)(using Sim, Async.Spawn): Unit = {
+  def run(c: Component)(using Sim): Unit = {
 
     def inner(
         c: Component,
@@ -27,7 +25,7 @@ object Phase {
     Logger.info("sim", "Started run phase for components:\n - " + fs.map(_._1.toString()).mkString("\n - "))
   }
 
-  def test(c: Component)(using Sim, Async.Spawn): Unit = {
+  def test(c: Component)(using Sim): Unit = {
     def inner(
         c: Component,
         fs: mutable.ListBuffer[(Component, Fork[?])]
@@ -51,7 +49,7 @@ object Phase {
     c.children.foreach(report)
   }
 
-  def reset(c: Component)(using Sim, Async.Spawn): Unit = {
+  def reset(c: Component)(using Sim): Unit = {
     def inner(
         c: Component,
         fs: mutable.ListBuffer[(Component, Fork[?])]
@@ -70,16 +68,16 @@ object Phase {
 }
 
 trait SimulationPhase extends Phase {
-  def sim()(using Sim, Async.Spawn): Unit
+  def sim()(using Sim): Unit
 }
 trait ReportPhase extends Phase {
   def report(): Unit
 }
 
 trait ResetPhase extends Phase {
-  def reset()(using Sim, Async.Spawn): Unit
+  def reset()(using Sim): Unit
 }
 
 trait TestPhase extends Phase {
-  def test()(using Sim, Async.Spawn): Unit
+  def test()(using Sim): Unit
 }

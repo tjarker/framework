@@ -1,15 +1,13 @@
 package apb
 
 import framework.*
-import framework.types.*
-import framework.simulation.Sim
 
 class ApbMonitor(using Hierarchy) extends Monitor[ApbTransaction] {
 
   val bfm = Config.get[ApbBfm]("bfm")
 
 
-  def sim()(using Sim, Async.Spawn) = forever {
+  def sim()(using Sim) = forever {
       val tx = new ApbTransaction
 
       var waitStates = 0

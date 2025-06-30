@@ -2,16 +2,14 @@ package framework.simulation
 
 import scala.util.DynamicVariable
 
-import gears.async.*
-import gears.async.default.given
 
-import framework.types.*
-import Types.*
+import _root_.framework.coop.{Task, Scheduler}
+import _root_.framework.types.*
 import Time.*
 import ModuleInterface.{ClockDomain, Register}
-import framework.Logger
+import _root_.framework.Logger
 
-import framework.Component
+import _root_.framework.Component
 
 import scala.collection.mutable
 
@@ -19,72 +17,27 @@ import scala.util.Success
 import scala.reflect.ClassTag
 
 
-
-trait Sim {
-
-  def currentClock: ClockPort
-
-  def withClock(c: ClockPort): Sim
-
-  def hierarchicalThreadName: String
-
-  def addChildThread(f: Future[?]): Unit
-
-  def getChildThreads: List[Future[?]]
-
-  def ctrl: SimulationController
-
-  def logger: Logger = Logger(true)
-
-  def registerCurrentThread()(using Async): Unit
-  def deregisterCurrentThread()(using Async): Unit
-
-  def poke(p: Input[Bits], value: BigInt)(using Async): Unit
-  def peek(p: Port[Bits])(using Async): BigInt
-
-  def peekMonitor(p: Input[Bits])(using Async): BigInt
-
-  def peekReg(r: Register)(using Async): BigInt
-
-  def step(c: ClockPort, steps: Int)(using Async): Unit
-
-  def step(steps: Int)(using Async): Unit = step(currentClock, steps)
-
-  def join(t: Thread)(using Async): Unit
-
-  def finish()(using Async): Unit
-
-  def abort(e: Throwable)(using Async): Unit
-
-  def time: SimulationTime
-
-}
-
 case class ForkContext(c: Option[Component])
 
-def withClockDomain[T](c: ClockPort)(block: (Sim, Async) ?=> T)(using Sim, Async) = {
-    val s = summon[Sim]
-    
-    val newS = s.withClock(c)
+def withClockDomain[T](c: ClockPort)(block: Sim ?=> T)(using Sim) = {
+  val s = summon[Sim]
 
-    block(using newS, summon[Async])
+  val newS = s.withClock(c)
+
+  block(using newS)
 }
 
-def stepClockDomain(steps: Int)(using Sim, Async) = {
-    summon[Sim].step(steps)
+def stepClockDomain(steps: Int)(using Sim) = {
+  summon[Sim].step(steps)
 }
 
-class Fork[T](name: String, block: (Sim, Async.Spawn) ?=> T, group: Seq[Fork[?]])(using Sim, Async.Spawn) {
+class Fork[T](name: String, block: Sim ?=> T, group: Seq[Fork[?]])(using Sim) {
 
     val s = summon[Sim]
-    val a = summon[Async.Spawn]
 
-    val sim = new Simulation(s.ctrl, SyncChannel(), name, s.currentClock)
-
-    var vThread = Option.empty[Thread]
+    val sim = new Simulation(s.ctrl, name, s.currentClock)
     
-    val future = Future {
-      vThread = Some(Thread.currentThread)
+    val task = Scheduler.launchTask {
       sim.registerCurrentThread()
       val r = try {
         block(using sim, a)
@@ -99,16 +52,16 @@ class Fork[T](name: String, block: (Sim, Async.Spawn) ?=> T, group: Seq[Fork[?]]
       r
     }
 
-    s.addChildThread(future)
+    s.addChildTask(task)
 
     def join(): Unit = {
-      s.join(vThread.get)
+      task.await
       group.foreach(_.join())
     }
 
-    def fork[T](block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Spawn): Fork[T] = {
+    def fork[T](block: Sim ?=> T)(using Sim): Fork[T] = {
       val s = summon[Sim]
-      val name = s.hierarchicalThreadName + "." + s.getChildThreads.size
+      val name = s.hierarchicalTaskName + "." + s.getChildThreads.size
       Fork(name, block, Seq(this) ++ group)
     }
 
@@ -117,14 +70,15 @@ class Fork[T](name: String, block: (Sim, Async.Spawn) ?=> T, group: Seq[Fork[?]]
 object Simulation {
 
   def apply[M <: ModuleInterface](m: M, timeUnit: Time, wave: Option[String] = None, debug: Boolean = false)(
-      block: (Sim, Async.Spawn) ?=> M => Unit
-  ): Unit = Async.blocking {
-    val ctrl = new SimulationController(SyncChannel(), m, timeUnit, debug, wave)
-    val sim = new Simulation(ctrl, SyncChannel(), "root", m.domains.head.clock)
+      block: Sim ?=> M => Unit
+  ): Unit = Scheduler.blocking {
+    val ctrl = new SimulationController(m, timeUnit, debug, wave)
+    val sim = new Simulation(ctrl, "root", m.domains.head.clock)
     given Sim = sim
     given ForkContext = ForkContext(None)
-    val controller = Future(ctrl.run())
-    Future {
+
+    ??? // TODO: how is the controller code run?
+    Scheduler.launchTask {
       sim.registerCurrentThread()
       try {
         block(m)
@@ -135,29 +89,27 @@ object Simulation {
       }
       sim.finish()
     }
-    controller.awaitResult
     Logger.success(s"Simulation of ${m.name} finished")
   }
 
   
 
-  def fork[T](block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Spawn): Fork[T] = {
+  def fork[T](block: Sim ?=> T)(using Sim): Fork[T] = {
     val s = summon[Sim]
-    val name = s.hierarchicalThreadName + "." + s.getChildThreads.size
+    val name = s.hierarchicalTaskName + "." + s.getChildTasks.size
     Fork(name, block, Seq.empty)
   }
 
-  def forkComp[T](c: Component, phase: String, block: (Sim, Async.Spawn) ?=> T)(using Sim, Async.Spawn): Fork[T] = {
+  def forkComp[T](c: Component, phase: String, block: Sim ?=> T)(using Sim): Fork[T] = {
     val s = summon[Sim]
-    val name = s.hierarchicalThreadName + "." + s.getChildThreads.size + s"(${c.name} in $phase)"
+    val name = s.hierarchicalTaskName + "." + s.getChildTasks.size + s"(${c.name} in $phase)"
     Fork(name, block, Seq.empty)
   }
 
 }
 
 class Simulation(
-    val ctrl: SimulationController,
-    response: SyncChannel[SimulationController.Response],
+    val ctrl: SimControl,
     val hierarchicalThreadName: String,
     val currentClock: ClockPort
 ) extends Sim {
@@ -165,27 +117,27 @@ class Simulation(
   import SimulationController.Command.*
   import SimulationController.Response.*
 
-  private val childThreads = collection.mutable.ListBuffer[Future[?]]()
+  private val childTasks = collection.mutable.ListBuffer[Task[?]]()
 
   def withClock(c: ClockPort): Sim = {
-    new Simulation(ctrl, response, hierarchicalThreadName, c)
+    new Simulation(ctrl, hierarchicalThreadName, c)
   }
 
-  def addChildThread(f: Future[?]): Unit = {
-    childThreads += f
+  def addChildTask(f: Task[?]): Unit = {
+    childTasks += f
   }
 
-  def getChildThreads: List[Future[?]] = childThreads.toList
+  def getChildTasks: List[Task[?]] = childTasks.toList
 
-  def registerCurrentThread()(using Async): Unit = {
-    ctrl.sendCommand(RegisterThread(Thread.currentThread, hierarchicalThreadName, response))
+  def registerCurrentThread(): Unit = {
+    ctrl.handleCommand(RegisterThread(Task.currentTask, hierarchicalThreadName, response))
   }
 
-  def deregisterCurrentThread()(using Async): Unit = {
-    ctrl.sendCommand(DeregisterThread(Thread.currentThread))
+  def deregisterCurrentThread(): Unit = {
+    ctrl.handleCommand(DeregisterThread(Thread.currentThread))
   }
 
-  def poke(p: Input[Bits], value: BigInt)(using Async): Unit = {
+  def poke(p: Input[Bits], value: BigInt): Unit = {
     ctrl.sendCommand(Poke(Thread.currentThread, p, value))
   }
 
@@ -246,26 +198,26 @@ class Simulation(
 
 object SimulationController {
 
-  enum Command(origin: Thread) {
-    case RegisterThread(t: Thread, name: String, response: SyncChannel[Response])
+  enum Command(origin: Task[?]) {
+    case RegisterTask(t: Task[?], name: String, response: SyncChannel[Response])
         extends Command(t)
-    case DeregisterThread(t: Thread) extends Command(t)
+    case DeregisterThread(t: Task[?]) extends Command(t)
 
-    case Poke(t: Thread, p: Input[Bits], value: BigInt) extends Command(t)
-    case Peek(t: Thread, p: Port[Bits]) extends Command(t)
-    case PeekMonitor(t: Thread, p: Input[Bits]) extends Command(t)
-    case Step(t: Thread, c: ClockPort, steps: Int) extends Command(t)
+    case Poke(t: Task[?], p: Input[Bits], value: BigInt) extends Command(t)
+    case Peek(t: Task[?], p: Port[Bits]) extends Command(t)
+    case PeekMonitor(t: Task[?], p: Input[Bits]) extends Command(t)
+    case Step(t: Task[?], c: ClockPort, steps: Int) extends Command(t)
 
-    case PeekReg(t: Thread, r: Register) extends Command(t)
+    case PeekReg(t: Task[?], r: Register) extends Command(t)
 
-    case SendToChannel[T](t: Thread, ch: framework.Channel[T]) extends Command(t)
-    case WaitForChannel[T](t: Thread, ch: framework.Channel[T]) extends Command(t)
+    case SendToChannel[T](t: Task[?], ch: framework.Channel[T]) extends Command(t)
+    case WaitForChannel[T](t: Task[?], ch: framework.Channel[T]) extends Command(t)
 
-    case WaitForThread(t: Thread, toBeJoined: Thread) extends Command(t)
+    case WaitForThread(t: Task[?], toBeJoined: Task[?]) extends Command(t)
 
-    case Finish(t: Thread) extends Command(t)
+    case Finish(t: Task[?]) extends Command(t)
 
-    case Abort(t: Thread, e: Throwable) extends Command(t)
+    case Abort(t: Task[?], e: Throwable) extends Command(t)
   }
 
   enum Response {
@@ -286,13 +238,15 @@ object SimulationController {
 
 }
 
+
+
+
 class SimulationController(
-    commands: SyncChannel[SimulationController.Command],
     val dut: ModuleInterface,
     timeUnit: Time,
     debug: Boolean,
     wave: Option[String]
-) {
+) extends SimControl {
 
   import SimulationController.*
   import Command.*
@@ -372,11 +326,7 @@ class SimulationController(
   logger.info("sim", uncommitedPortState.toString)
   logger.info("sim", inputDriveSkew.toString)
 
-  def sendCommand(c: Command)(using Async): Unit = {
-    commands.send(c)
-  }
-
-  def run()(using Async): Unit = {
+  def run(): Unit = {
     logger.info("ctrl", "Waiting for command")
     commands.read() match {
       case Left(_) => logger.error("ctrl", "Unexpected command")

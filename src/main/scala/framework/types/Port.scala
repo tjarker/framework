@@ -3,7 +3,6 @@ package framework.types
 import framework.macros.Naming
 import framework.simulation.Time
 import framework.simulation.ModuleInterface.ModuleBuilderContext
-import Types.*
 
 trait Port[+T <: Bits] {
   def width: Width

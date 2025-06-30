@@ -1,10 +1,6 @@
 package apb
 
 import framework.*
-import framework.types.*
-
-import gears.async.*
-import framework.simulation.Sim
 
 class ApbBfm(
     val clk: ClockPort,
@@ -19,7 +15,7 @@ class ApbBfm(
     val slverr: Output[Bool]
 ) {
 
-  def reset()(using Sim, Async): Unit = {
+  def reset()(using Sim): Unit = {
     this.en.poke(true)
     this.sel.poke(false)
 
@@ -28,7 +24,7 @@ class ApbBfm(
     this.clk.step(5)
   }
 
-  def write(addr: BigInt, data: BigInt)(using Sim, Async): Option[Unit] = {
+  def write(addr: BigInt, data: BigInt)(using Sim): Option[Unit] = {
 
     this.addr.poke(addr)
     this.en.poke(false)
@@ -48,7 +44,7 @@ class ApbBfm(
     res
   }
 
-  def read(addr: BigInt)(using Sim, Async): Option[BigInt] = {
+  def read(addr: BigInt)(using Sim): Option[BigInt] = {
 
     this.addr.poke(addr)
     this.en.poke(false)

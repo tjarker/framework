@@ -1,6 +1,5 @@
 package framework.types
 
-import Types.*
 
 class UInt(val width: Width) extends Data {
   override def toString(): String = s"UInt($width)"

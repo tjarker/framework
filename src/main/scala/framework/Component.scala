@@ -1,14 +1,8 @@
 package framework
 
-import gears.async.Async
-
 import scala.collection.mutable
 
 import scala.reflect.ClassTag
-import gears.async.Async
-import gears.async.ChannelMultiplexer
-
-import Result.*
 
 import java.lang.reflect.Modifier
 import framework.macros.Naming

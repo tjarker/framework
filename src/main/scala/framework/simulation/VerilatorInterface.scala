@@ -3,7 +3,7 @@ package framework.simulation
 import com.sun.jna.*
 
 import Time.*
-import framework.Logger
+import _root_.framework.Logger
 
 object VerilatorInterface {
 

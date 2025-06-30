@@ -1,6 +1,6 @@
 package framework.types
 
-import Types.*
+import Extensions.*
 
 class Bool() extends Data {
   val width = 1.W

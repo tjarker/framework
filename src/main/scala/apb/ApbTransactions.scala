@@ -1,7 +1,6 @@
 package apb
 
 import framework.*
-import framework.types.*
 
 enum OpType(val value: Int) {
   case Read extends OpType(0)

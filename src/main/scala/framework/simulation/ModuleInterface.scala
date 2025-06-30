@@ -1,9 +1,8 @@
 package framework.simulation
 
 import scala.collection.mutable
+import _root_.framework.types.*
 
-import framework.types.*
-import Types.*
 import Time.*
 import java.nio.file.Path
 

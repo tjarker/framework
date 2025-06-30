@@ -1,13 +1,10 @@
 package framework
 
-import gears.async.Async
-import gears.async.default.given
-
 import scala.collection.mutable
 
 import scala.reflect.ClassTag
+import Channel.Result.*
 
-import Result.*
 import simulation.{Fork, Sim}
 
 
@@ -18,36 +15,36 @@ abstract class Sequence[A <: Transaction, B <: Transaction](using
   val channel = Channel[Option[A]]()
   val respChannel = Channel[B]()
 
-  protected def body()(using Sim, Async.Spawn): Unit
+  protected def body()(using Sim): Unit
 
-  protected def yieldTx(t: A)(using Sim, Async): B = {
+  protected def yieldTx(t: A)(using Sim): B = {
     channel.send(Some(t))
     respChannel.read() match {
       case Ok(b)  => b
-      case Err(_) => throw new Exception("No response")
+      case Closed => throw new Exception("No response")
     }
   }
 
-  protected def yieldSeq(seq: Sequence[A, B])(using Sim, Async): Unit = {
+  protected def yieldSeq(seq: Sequence[A, B])(using Sim): Unit = {
     seq.foreach(t => yieldTx(t))
   }
 
-  protected def yieldSeq(seq: Seq[A])(using Sim, Async): Seq[B] = {
+  protected def yieldSeq(seq: Seq[A])(using Sim): Seq[B] = {
     for (t <- seq) yield yieldTx(t)
   }
 
-  def next()(using Sim, Async): Option[A] = {
+  def next()(using Sim): Option[A] = {
     channel.read() match {
       case Ok(t)  => t
-      case Err(_) => None
+      case Closed => None
     }
   }
 
-  def respond(b: B)(using Sim, Async): Unit = {
+  def respond(b: B)(using Sim): Unit = {
     respChannel.send(b)
   }
 
-  def foreach(f: A => B)(using Sim, Async): Unit = {
+  def foreach(f: A => B)(using Sim): Unit = {
     while (true) {
       next() match {
         case Some(t) => {
@@ -64,7 +61,7 @@ abstract class Sequence[A <: Transaction, B <: Transaction](using
 
   private var runner: Option[Fork[?]] = None
 
-  def start()(using Sim, Async.Spawn): Unit = {
+  def start()(using Sim): Unit = {
     runner = Some(fork {
       info(s"Starting sequence $this")
       body()
@@ -72,7 +69,7 @@ abstract class Sequence[A <: Transaction, B <: Transaction](using
     })
   }
 
-  def waitUntilDone()(using Async): Unit = {
+  def waitUntilDone(): Unit = {
     runner match {
       case Some(r) => r.join()
       case None    => throw new Exception("Sequence not started")
@@ -86,7 +83,7 @@ object SequenceComposition {
   class ScalaSeq[A <: Transaction](seq: Seq[A])(using Hierarchy)
       extends Sequence[A, Transaction] {
 
-    protected def body()(using Sim, Async.Spawn): Unit = {
+    protected def body()(using Sim): Unit = {
       for (t <- seq) {
         yieldTx(t)
       }
@@ -98,7 +95,7 @@ object SequenceComposition {
       Hierarchy
   ) extends Sequence[A, B] {
 
-    protected def body()(using Sim, Async.Spawn): Unit = {
+    protected def body()(using Sim): Unit = {
       for (seq <- seqs) {
         yieldSeq(seq)
       }
@@ -112,7 +109,7 @@ object SequenceComposition {
   )(using Hierarchy)
       extends Sequence[B, C] {
 
-    protected def body()(using Sim, Async.Spawn): Unit = {
+    protected def body()(using Sim): Unit = {
       seq.foreach { t =>
         yieldTx(f(t))
       }
@@ -125,7 +122,7 @@ object SequenceComposition {
   )(using Hierarchy)
       extends Sequence[A, B] {
 
-    protected def body()(using Sim, Async.Spawn): Unit = {
+    protected def body()(using Sim): Unit = {
 
       val list = mutable.ListBuffer(s*)
 

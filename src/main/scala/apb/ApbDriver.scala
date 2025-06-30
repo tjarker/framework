@@ -1,27 +1,22 @@
 package apb
 
 import framework.*
-import gears.async.Async.Spawn
-import gears.async.Async
-import framework.types.*
-import framework.types.Types.stepUntil
-import framework.simulation.Sim
 
 abstract class ApbBaseDriver(using Hierarchy) extends Driver[ApbTransaction, ApbTransaction] {
 
 
   val bfm = param[ApbBfm]
 
-  override def sim()(using Sim, Spawn): Unit = {
+  override def sim()(using Sim): Unit = {
 
     driverLoop()
 
   }
 
-  def drivePins(tx: ApbTransaction)(using Sim, Async): ApbTransaction
+  def drivePins(tx: ApbTransaction)(using Sim): ApbTransaction
 
 
-  def driverLoop()(using Sim, Async): Unit = while(true) {
+  def driverLoop()(using Sim): Unit = while(true) {
 
     info("Waiting for next transaction")
 
@@ -40,7 +35,7 @@ abstract class ApbBaseDriver(using Hierarchy) extends Driver[ApbTransaction, Apb
 
 class ApbProducerDriver(using Hierarchy) extends ApbBaseDriver {
 
-  override def drivePins(tx: ApbTransaction)(using Sim, Async): ApbTransaction = {
+  override def drivePins(tx: ApbTransaction)(using Sim): ApbTransaction = {
 
     info("Driving pins for producer")
 
